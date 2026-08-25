@@ -13,6 +13,13 @@ from Maturation_Models import (
     residuals_1step,
     residuals_2step,
 )
+from bode_plot import (
+    bode_1step,
+    bode_2step,
+    analytical_cutoff_1step,
+    analytical_cutoff_2step,
+    numerical_cutoff,
+)
 
 # ---------------------------------------------------------
 # Streamlit UI
@@ -21,7 +28,7 @@ from Maturation_Models import (
 st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
 st.title("Fluorescent Protein Maturation Delay Model")
 
-sim_tab, data_tab = st.tabs(["Simulation", "Experimental Data"])
+sim_tab, data_tab, bode_tab = st.tabs(["Simulation", "Experimental Data", "Bode Plot"])
 
 model_choice = st.sidebar.radio(
     "Maturation model",
@@ -302,6 +309,20 @@ with data_tab:
 
                         st.caption(f"Baseline subtracted = {baseline:.4f}")
 
+                        residuals = fit.fun
+                        sse = float(np.sum(residuals ** 2))
+                        rmse = float(np.sqrt(np.mean(residuals ** 2)))
+                        ss_tot = float(np.sum((F_meas - np.mean(F_meas)) ** 2))
+                        r_squared = 1.0 - sse / ss_tot if ss_tot > 0 else float("nan")
+
+                        st.markdown("**Goodness of fit**")
+                        err_col1, err_col2, err_col3 = st.columns(3)
+                        err_col1.metric("SSE (least-squares cost)", f"{sse:.4f}")
+                        err_col2.metric("RMSE", f"{rmse:.4f}")
+                        err_col3.metric("R²", f"{r_squared:.4f}")
+                        if not fit.success:
+                            st.warning(f"Solver did not fully converge: {fit.message}")
+
                         ax3.set_xlabel("Slice")
                         ax3.set_ylabel("Mean intensity")
                         ax3.legend()
@@ -309,3 +330,78 @@ with data_tab:
                         st.pyplot(fig3)
     else:
         st.info("Upload a CSV file to see the Mean intensity vs. Slice plot.")
+
+with bode_tab:
+    st.markdown(
+        "Frequency response of the maturation model currently selected in the "
+        "sidebar, using its rate constants (`km`/`k1`,`k2`, `kb`, `kd`, `alpha`). "
+        "This shows how strongly the reporter attenuates and delays gene "
+        "expression fluctuations at each frequency, and gives a cutoff "
+        "frequency above which dynamics are lost to maturation/bleaching."
+    )
+
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        w_start_exp = st.number_input(
+            "Frequency range: 10^ (start)",
+            value=-4.0 if is_two_step else -3.0, step=1.0,
+            help="Suggested: -4 for 2-step, -3 for 1-step models.",
+        )
+    with col_b:
+        w_end_exp = st.number_input(
+            "Frequency range: 10^ (end)",
+            value=2.0 if is_two_step else 1.0, step=1.0,
+            help="Suggested: 2 for 2-step, 1 for 1-step models.",
+        )
+    with col_c:
+        w_points = st.number_input(
+            "Number of frequency points",
+            min_value=10, value=1200 if is_two_step else 1000, step=100,
+        )
+
+    bode_button = st.button("Plot Bode Response", type="primary")
+
+    if bode_button:
+        w = np.logspace(w_start_exp, w_end_exp, int(w_points))
+
+        if is_two_step:
+            w, mag, phase = bode_2step(alpha, k1, k2, kb, kd, w)
+            title_suffix = "2-step maturation model"
+        else:
+            w, mag, phase = bode_1step(alpha, km, kb, kd, w)
+            title_suffix = "1-step maturation model"
+
+        fig4, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(8, 6))
+
+        ax_mag.semilogx(w, mag)
+        ax_mag.set_ylabel("Magnitude (dB)")
+        ax_mag.set_xlabel("Frequency (rad/time)")
+        ax_mag.set_title(f"Bode Plot: {title_suffix}")
+        ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
+
+        ax_phase.semilogx(w, phase)
+        ax_phase.set_ylabel("Phase (degrees)")
+        ax_phase.set_xlabel("Frequency (rad/time)")
+        ax_phase.grid(True, which="both", linestyle="--", alpha=0.5)
+
+        fig4.tight_layout()
+        st.pyplot(fig4)
+
+        wc_numerical = numerical_cutoff(w, mag)
+        cutoff_col1, cutoff_col2 = st.columns(2)
+        if wc_numerical is not None:
+            cutoff_col1.metric("Numerical -3 dB cutoff (rad/time)", f"{wc_numerical:.6f}")
+        else:
+            cutoff_col1.warning("Cutoff not reached within the selected frequency range.")
+
+        if is_two_step:
+            wc_analytical = analytical_cutoff_2step(k1, k2, kb, kd)
+        else:
+            wc_analytical = analytical_cutoff_1step(km, kb, kd)
+
+        if wc_analytical is not None:
+            cutoff_col2.metric("Analytical -3 dB cutoff (rad/time)", f"{wc_analytical:.6f}")
+        else:
+            cutoff_col2.warning("No positive real cutoff root found.")
+    else:
+        st.info("Set the frequency range and click **Plot Bode Response**.")
