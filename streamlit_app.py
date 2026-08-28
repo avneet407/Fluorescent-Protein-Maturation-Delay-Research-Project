@@ -20,6 +20,11 @@ from bode_plot import (
     analytical_cutoff_2step,
     numerical_cutoff,
 )
+from gaussian_noise import (
+    simulate_1step_noisy,
+    simulate_2step_noisy,
+    add_measurement_noise,
+)
 
 # ---------------------------------------------------------
 # Streamlit UI
@@ -28,7 +33,7 @@ from bode_plot import (
 st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
 st.title("Fluorescent Protein Maturation Delay Model")
 
-sim_tab, data_tab, bode_tab = st.tabs(["Simulation", "Experimental Data", "Bode Plot"])
+sim_tab, data_tab, bode_tab = st.tabs(["Simulation", "Least Squares Fitting", "Bode Plot"])
 
 model_choice = st.sidebar.radio(
     "Maturation model",
@@ -60,25 +65,25 @@ st.sidebar.header("Rate constants")
 if is_two_step:
     k1 = st.sidebar.number_input(
         "k1 - rate I -> X", min_value=0.0, value=0.20, step=0.01, format="%.3f",
-        help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.20.",
+        help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.20.",
     )
     k2 = st.sidebar.number_input(
         "k2 - rate X -> M", min_value=0.0, value=0.10, step=0.01, format="%.3f",
-        help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.10.",
+        help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.10.",
     )
 else:
     km = st.sidebar.number_input(
         "km - rate I -> M", min_value=0.0, value=0.15, step=0.01, format="%.3f",
-        help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.15.",
+        help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.15.",
     )
 
 kd = st.sidebar.number_input(
     "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
-    help="Suggested range: 0.001-0.05 /min. Applies to all species. Illustrative default: 0.01.",
+    help="Suggested range: 0.001-0.05 /sec. Applies to all species. Illustrative default: 0.01.",
 )
 kb = st.sidebar.number_input(
     "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.02, step=0.005, format="%.4f",
-    help="Suggested range: 0.0-0.1 /min. Illustrative default: 0.02.",
+    help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02.",
 )
 u = st.sidebar.number_input(
     "u - production rate", min_value=0.0, value=0.0, step=0.1, format="%.3f",
@@ -91,7 +96,7 @@ alpha = st.sidebar.number_input(
 )
 
 st.sidebar.header("Simulation time")
-t_end = st.sidebar.number_input("End time", min_value=1.0, value=60.0, step=10.0)
+t_end = st.sidebar.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0)
 n_points = st.sidebar.number_input("Number of time points", min_value=10, value=300, step=10)
 
 run = st.sidebar.button("Run Simulation", type="primary")
@@ -136,8 +141,8 @@ with sim_tab:
             ax.plot(sol.t, F, "--", label="F = alpha * M (fluorescence)", linewidth=2)
             ax.set_title("1-step maturation model")
 
-        ax.set_xlabel("Time")
-        ax.set_ylabel("Amount / Fluorescence (a.u.)")
+        ax.set_xlabel("Time (sec)")
+        ax.set_ylabel("Amount/ Mean Intensity")
         ax.legend()
         fig.tight_layout()
 
@@ -147,29 +152,157 @@ with sim_tab:
 
 with data_tab:
     st.markdown(
-        "Upload a trench intensity CSV (columns: `Slice, Mean, StdDev, Min, Max`) "
-        "to plot **Mean intensity vs. Slice**."
+        "Fit maturation model parameters to a fluorescence trace using "
+        "least-squares optimization. Either upload real experimental data "
+        "from a trench intensity CSV, or generate synthetic noisy data by "
+        "perturbing the simulation's rate constants with Gaussian noise and "
+        "re-integrating the model, then fit against it."
     )
 
-    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+    data_source = st.radio(
+        "Data source",
+        options=["Upload experimental CSV", "Generate synthetic data from simulation"],
+    )
 
-    if uploaded_file is not None:
-        try:
-            data = pd.read_csv(uploaded_file)
-        except Exception as e:
-            st.error(f"Could not read CSV file: {e}")
+    data = None
+    data_label = ""
+
+    if data_source == "Upload experimental CSV":
+        st.markdown(
+            "Upload a trench intensity CSV (columns: `Slice, Mean, StdDev, Min, Max`) "
+            "to plot **Mean intensity vs. Slice**."
+        )
+
+        uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+
+        if uploaded_file is not None:
+            try:
+                candidate = pd.read_csv(uploaded_file)
+            except Exception as e:
+                st.error(f"Could not read CSV file: {e}")
+            else:
+                if "Slice" not in candidate.columns or "Mean" not in candidate.columns:
+                    st.error(
+                        "CSV must contain 'Slice' and 'Mean' columns. "
+                        f"Found columns: {list(candidate.columns)}"
+                    )
+                else:
+                    seconds_per_slice = st.number_input(
+                        "Time per slice (seconds)",
+                        min_value=0.0, value=60.0, step=1.0, format="%.3f",
+                        help="Conversion factor from imaging slice/frame number to time. "
+                             "Suggested: 60 seconds per slice (adjust to match your "
+                             "acquisition interval).",
+                    )
+                    candidate["Time"] = candidate["Slice"] * seconds_per_slice
+                    data = candidate
+                    data_label = uploaded_file.name
         else:
-            if "Slice" not in data.columns or "Mean" not in data.columns:
-                st.error(
-                    "CSV must contain 'Slice' and 'Mean' columns. "
-                    f"Found columns: {list(data.columns)}"
+            st.info("Upload a CSV file to see the Mean intensity vs. Slice plot.")
+
+    else:
+        st.markdown(
+            "Generates a synthetic fluorescence trace using the model and "
+            "rate constants currently set in the sidebar. Two independent "
+            "noise sources can be applied: Gaussian noise on the rate "
+            "constant(s) themselves (drawn fresh at every simulated time "
+            "step, before the model is integrated forward), and/or Gaussian "
+            "measurement noise added directly to the resulting Mean "
+            "intensity trace (e.g. camera/shot noise). The resulting trace "
+            "is then treated like experimental data below."
+        )
+
+        if is_two_step:
+            noise_col1, noise_col2, noise_col3 = st.columns(3)
+            with noise_col1:
+                k1_noise_std = st.number_input(
+                    "k1 noise std dev", min_value=0.0, value=0.02, step=0.01, format="%.4f",
+                    help="Standard deviation of the Gaussian noise added to k1 at each time step.",
+                )
+            with noise_col2:
+                k2_noise_std = st.number_input(
+                    "k2 noise std dev", min_value=0.0, value=0.02, step=0.01, format="%.4f",
+                    help="Standard deviation of the Gaussian noise added to k2 at each time step.",
+                )
+            with noise_col3:
+                kb_noise_std = st.number_input(
+                    "kb noise std dev", min_value=0.0, value=0.005, step=0.001, format="%.4f",
+                    help="Standard deviation of the Gaussian noise added to kb at each time step.",
+                )
+        else:
+            noise_col1, noise_col2 = st.columns(2)
+            with noise_col1:
+                km_noise_std = st.number_input(
+                    "km noise std dev", min_value=0.0, value=0.02, step=0.01, format="%.4f",
+                    help="Standard deviation of the Gaussian noise added to km at each time step.",
+                )
+            with noise_col2:
+                kb_noise_std = st.number_input(
+                    "kb noise std dev", min_value=0.0, value=0.005, step=0.001, format="%.4f",
+                    help="Standard deviation of the Gaussian noise added to kb at each time step.",
+                )
+
+        measurement_noise_std = st.number_input(
+            "Measurement noise std dev (Mean intensity)",
+            min_value=0.0, value=0.0, step=0.5,
+            help="Standard deviation of independent Gaussian noise added directly "
+                 "to the simulated Mean intensity trace (e.g. camera/shot noise), "
+                 "on top of any rate-constant noise above. Set to 0 to disable.",
+        )
+
+        use_seed = st.checkbox("Fix random seed (reproducible noise)", value=False)
+        seed = None
+        measurement_seed = None
+        if use_seed:
+            seed = int(st.number_input("Random seed", min_value=0, value=0, step=1))
+            measurement_seed = seed + 1
+
+        generate_button = st.button("Generate Synthetic Data", type="primary")
+
+        if generate_button:
+            t_syn = np.linspace(0, t_end, int(n_points))
+            if is_two_step:
+                params_syn = {"u": u, "k1": k1, "k2": k2, "kb": kb, "kd": kd, "alpha": alpha}
+                _, _, _, _, _, F_syn = simulate_2step_noisy(
+                    t_syn, params_syn, I0=I0, X0=X0, M0=M0, B0=B0,
+                    k1_std=k1_noise_std, k2_std=k2_noise_std, kb_std=kb_noise_std,
+                    seed=seed,
                 )
             else:
+                params_syn = {"u": u, "km": km, "kb": kb, "kd": kd, "alpha": alpha}
+                _, _, _, _, F_syn = simulate_1step_noisy(
+                    t_syn, params_syn, I0=I0, M0=M0, B0=B0,
+                    km_std=km_noise_std, kb_std=kb_noise_std,
+                    seed=seed,
+                )
+
+            F_syn = add_measurement_noise(F_syn, measurement_noise_std, seed=measurement_seed)
+
+            st.session_state["synthetic_data_df"] = pd.DataFrame(
+                {"Slice": t_syn, "Mean": F_syn, "Time": t_syn}
+            )
+            st.session_state["synthetic_params"] = {
+                "is_two_step": is_two_step,
+                "km": None if is_two_step else km,
+                "k1": k1 if is_two_step else None,
+                "k2": k2 if is_two_step else None,
+                "kb": kb,
+                "kd": kd,
+                "alpha": alpha,
+            }
+
+        if "synthetic_data_df" in st.session_state:
+            data = st.session_state["synthetic_data_df"]
+            data_label = "Synthetic data"
+        else:
+            st.info("Click **Generate Synthetic Data** to create a synthetic trace.")
+
+    if data is not None:
                 fig2, ax2 = plt.subplots(figsize=(9, 5))
-                ax2.plot(data["Slice"], data["Mean"], marker="o", markersize=3)
-                ax2.set_xlabel("Slice")
+                ax2.plot(data["Time"], data["Mean"], marker="o", markersize=3)
+                ax2.set_xlabel("Time (sec)")
                 ax2.set_ylabel("Mean intensity")
-                ax2.set_title(uploaded_file.name)
+                ax2.set_title(data_label)
                 fig2.tight_layout()
 
                 st.pyplot(fig2)
@@ -184,15 +317,15 @@ with data_tab:
                     "baseline-corrected fluorescence trace."
                 )
 
-                slice_min = float(data["Slice"].min())
-                slice_max = float(data["Slice"].max())
+                time_min = float(data["Time"].min())
+                time_max = float(data["Time"].max())
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    slice_start, slice_end = st.slider(
-                        "Fitting region (Slice range)",
-                        min_value=slice_min, max_value=slice_max,
-                        value=(slice_min, slice_max),
+                    time_start, time_end = st.slider(
+                        "Fitting region (Time range, sec)",
+                        min_value=time_min, max_value=time_max,
+                        value=(time_min, time_max),
                         help="Suggested: the region where fluorescence rises smoothly, "
                              "before/after any transients or bleaching dominate.",
                     )
@@ -218,15 +351,15 @@ with data_tab:
                          "(e.g. chloramphenicol chase).",
                 )
 
-                slice_all = data["Slice"].to_numpy(dtype=float)
+                time_all = data["Time"].to_numpy(dtype=float)
                 F_raw_all = data["Mean"].to_numpy(dtype=float)
-                mask = (slice_all >= slice_start) & (slice_all <= slice_end)
-                t_raw = slice_all[mask]
+                mask = (time_all >= time_start) & (time_all <= time_end)
+                t_raw = time_all[mask]
                 F_raw = F_raw_all[mask]
 
                 if len(t_raw) < 5:
                     st.warning(
-                        "Selected slice region contains too few data points "
+                        "Selected time region contains too few data points "
                         "(need at least 5)."
                     )
                 else:
@@ -266,6 +399,20 @@ with data_tab:
                                 "u": u_step, "k1": k1_hat, "k2": k2_hat,
                                 "kb": kb_hat, "kd": kd_hat, "alpha": alpha_hat,
                             }
+                            st.session_state["fit_result"] = {
+                                "is_two_step": True,
+                                "km": None,
+                                "k1": k1_hat,
+                                "k2": k2_hat,
+                                "kb": kb_hat,
+                                "kd": kd_hat,
+                                "alpha": alpha_hat,
+                                "source_label": (
+                                    "synthetic data"
+                                    if data_source == "Generate synthetic data from simulation"
+                                    else "experimental data"
+                                ),
+                            }
                             _, I_fit, X_fit, M_fit, B_fit, F_fit = simulate_2step(
                                 t_fit, fitted_params, I0=I0_hat, X0=0.0, M0=0.0, B0=0.0
                             )
@@ -280,7 +427,7 @@ with data_tab:
                             res_col3.metric("alpha", f"{alpha_hat:.4f}")
 
                             ax3.plot(t_raw, F_fit, "-", linewidth=2, label="2-step model fit")
-                            ax3.set_title("2-step fit on selected slice region")
+                            ax3.set_title("2-step fit on selected time region")
                         else:
                             x0 = np.array([I0_guess, km_guess, kb_guess, kd_guess, alpha_guess])
                             bounds = ([0.0, 0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 5.0, 10.0])
@@ -291,6 +438,20 @@ with data_tab:
                             fitted_params = {
                                 "u": u_step, "km": km_hat,
                                 "kb": kb_hat, "kd": kd_hat, "alpha": alpha_hat,
+                            }
+                            st.session_state["fit_result"] = {
+                                "is_two_step": False,
+                                "km": km_hat,
+                                "k1": None,
+                                "k2": None,
+                                "kb": kb_hat,
+                                "kd": kd_hat,
+                                "alpha": alpha_hat,
+                                "source_label": (
+                                    "synthetic data"
+                                    if data_source == "Generate synthetic data from simulation"
+                                    else "experimental data"
+                                ),
                             }
                             _, I_fit, M_fit, B_fit, F_fit = simulate_1step(
                                 t_fit, fitted_params, I0=I0_hat, M0=0.0, B0=0.0
@@ -305,7 +466,7 @@ with data_tab:
                             res_col3.metric("alpha", f"{alpha_hat:.4f}")
 
                             ax3.plot(t_raw, F_fit, "-", linewidth=2, label="1-step model fit")
-                            ax3.set_title("1-step fit on selected slice region")
+                            ax3.set_title("1-step fit on selected time region")
 
                         st.caption(f"Baseline subtracted = {baseline:.4f}")
 
@@ -323,13 +484,62 @@ with data_tab:
                         if not fit.success:
                             st.warning(f"Solver did not fully converge: {fit.message}")
 
-                        ax3.set_xlabel("Slice")
+                        ax3.set_xlabel("Time (sec)")
                         ax3.set_ylabel("Mean intensity")
                         ax3.legend()
                         fig3.tight_layout()
                         st.pyplot(fig3)
-    else:
-        st.info("Upload a CSV file to see the Mean intensity vs. Slice plot.")
+
+                        synthetic_params = st.session_state.get("synthetic_params")
+                        if (
+                            data_source == "Generate synthetic data from simulation"
+                            and not fit_is_two_step
+                            and synthetic_params is not None
+                            and not synthetic_params["is_two_step"]
+                        ):
+                            a_true = synthetic_params["km"] + synthetic_params["kd"]
+                            b_true = synthetic_params["kb"] + synthetic_params["kd"]
+                            G_true = synthetic_params["alpha"] * synthetic_params["km"]
+
+                            a_fit = km_hat + kd_hat
+                            b_fit = kb_hat + kd_hat
+                            G_fit = alpha_hat * km_hat
+
+                            st.markdown("**Synthetic data: input vs. fitted derived quantities**")
+                            comparison_df = pd.DataFrame(
+                                {
+                                    "Quantity": ["a = km + kd", "b = kb + kd", "G = alpha * km"],
+                                    "Synthetic input": [a_true, b_true, G_true],
+                                    "Least-squares output": [a_fit, b_fit, G_fit],
+                                }
+                            )
+                            st.table(comparison_df.set_index("Quantity"))
+
+                        if (
+                            data_source == "Generate synthetic data from simulation"
+                            and fit_is_two_step
+                            and synthetic_params is not None
+                            and synthetic_params["is_two_step"]
+                        ):
+                            a_true = synthetic_params["k1"] + synthetic_params["kd"]
+                            c_true = synthetic_params["k2"] + synthetic_params["kd"]
+                            b_true = synthetic_params["kb"] + synthetic_params["kd"]
+                            G3_true = synthetic_params["alpha"] * synthetic_params["k1"] * synthetic_params["k2"]
+
+                            a_fit = k1_hat + kd_hat
+                            c_fit = k2_hat + kd_hat
+                            b_fit = kb_hat + kd_hat
+                            G3_fit = alpha_hat * k1_hat * k2_hat
+
+                            st.markdown("**Synthetic data: input vs. fitted derived quantities**")
+                            comparison_df = pd.DataFrame(
+                                {
+                                    "Quantity": ["a = k1 + kd", "c = k2 + kd", "b = kb + kd", "G3 = alpha * k1 * k2"],
+                                    "Synthetic input": [a_true, c_true, b_true, G3_true],
+                                    "Least-squares output": [a_fit, c_fit, b_fit, G3_fit],
+                                }
+                            )
+                            st.table(comparison_df.set_index("Quantity"))
 
 with bode_tab:
     st.markdown(
@@ -337,7 +547,9 @@ with bode_tab:
         "sidebar, using its rate constants (`km`/`k1`,`k2`, `kb`, `kd`, `alpha`). "
         "This shows how strongly the reporter attenuates and delays gene "
         "expression fluctuations at each frequency, and gives a cutoff "
-        "frequency above which dynamics are lost to maturation/bleaching."
+        "frequency above which dynamics are lost to maturation/bleaching. If "
+        "available, the synthetic-data ground truth and the most recent "
+        "least-squares fit are overlaid for comparison."
     )
 
     col_a, col_b, col_c = st.columns(3)
@@ -373,16 +585,53 @@ with bode_tab:
 
         fig4, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(8, 6))
 
-        ax_mag.semilogx(w, mag)
+        ax_mag.semilogx(w, mag, color="tab:blue", label=f"Sidebar parameters ({title_suffix})")
         ax_mag.set_ylabel("Magnitude (dB)")
-        ax_mag.set_xlabel("Frequency (rad/time)")
-        ax_mag.set_title(f"Bode Plot: {title_suffix}")
+        ax_mag.set_xlabel("Frequency (rad/sec)")
+        ax_mag.set_title("Bode Plot")
         ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
 
-        ax_phase.semilogx(w, phase)
+        ax_phase.semilogx(w, phase, color="tab:blue", label=f"Sidebar parameters ({title_suffix})")
         ax_phase.set_ylabel("Phase (degrees)")
-        ax_phase.set_xlabel("Frequency (rad/time)")
+        ax_phase.set_xlabel("Frequency (rad/sec)")
         ax_phase.grid(True, which="both", linestyle="--", alpha=0.5)
+
+        synthetic_params = st.session_state.get("synthetic_params")
+        if synthetic_params is not None:
+            if synthetic_params["is_two_step"]:
+                _, mag_syn, phase_syn = bode_2step(
+                    synthetic_params["alpha"], synthetic_params["k1"], synthetic_params["k2"],
+                    synthetic_params["kb"], synthetic_params["kd"], w,
+                )
+                syn_label = "Synthetic input (2-step)"
+            else:
+                _, mag_syn, phase_syn = bode_1step(
+                    synthetic_params["alpha"], synthetic_params["km"],
+                    synthetic_params["kb"], synthetic_params["kd"], w,
+                )
+                syn_label = "Synthetic input (1-step)"
+            ax_mag.semilogx(w, mag_syn, color="tab:green", linestyle="--", label=syn_label)
+            ax_phase.semilogx(w, phase_syn, color="tab:green", linestyle="--", label=syn_label)
+
+        fit_result = st.session_state.get("fit_result")
+        if fit_result is not None:
+            if fit_result["is_two_step"]:
+                _, mag_fit, phase_fit = bode_2step(
+                    fit_result["alpha"], fit_result["k1"], fit_result["k2"],
+                    fit_result["kb"], fit_result["kd"], w,
+                )
+                fit_label = f"Least-squares fit (2-step, {fit_result['source_label']})"
+            else:
+                _, mag_fit, phase_fit = bode_1step(
+                    fit_result["alpha"], fit_result["km"],
+                    fit_result["kb"], fit_result["kd"], w,
+                )
+                fit_label = f"Least-squares fit (1-step, {fit_result['source_label']})"
+            ax_mag.semilogx(w, mag_fit, color="tab:red", linestyle=":", label=fit_label)
+            ax_phase.semilogx(w, phase_fit, color="tab:red", linestyle=":", label=fit_label)
+
+        ax_mag.legend(fontsize=8)
+        ax_phase.legend(fontsize=8)
 
         fig4.tight_layout()
         st.pyplot(fig4)
@@ -390,7 +639,7 @@ with bode_tab:
         wc_numerical = numerical_cutoff(w, mag)
         cutoff_col1, cutoff_col2 = st.columns(2)
         if wc_numerical is not None:
-            cutoff_col1.metric("Numerical -3 dB cutoff (rad/time)", f"{wc_numerical:.6f}")
+            cutoff_col1.metric("Numerical -3 dB cutoff (rad/sec)", f"{wc_numerical:.6f}")
         else:
             cutoff_col1.warning("Cutoff not reached within the selected frequency range.")
 
@@ -400,7 +649,7 @@ with bode_tab:
             wc_analytical = analytical_cutoff_1step(km, kb, kd)
 
         if wc_analytical is not None:
-            cutoff_col2.metric("Analytical -3 dB cutoff (rad/time)", f"{wc_analytical:.6f}")
+            cutoff_col2.metric("Analytical -3 dB cutoff (rad/sec)", f"{wc_analytical:.6f}")
         else:
             cutoff_col2.warning("No positive real cutoff root found.")
     else:
