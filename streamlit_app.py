@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 
 import numpy as np
@@ -29,13 +30,33 @@ from gaussian_noise import (
 )
 from multi_start_fit import run_multi_start
 from multi_start_plots import plot_histograms
-from history_store import load_history, append_entry, clear_history, delete_entry
+from history_store import (
+    load_multi_start_history,
+    append_multi_start_entry,
+    clear_multi_start_history,
+    delete_multi_start_entry,
+    load_profile_history,
+    append_profile_entry,
+    clear_profile_history,
+    delete_profile_entry,
+)
 from profile_likelihood import (
     profile_raw_parameter,
     profile_derived_quantity,
     DERIVED_QUANTITY_FORMULAS,
     compute_true_values,
 )
+
+
+def compute_dataset_key(data_label, data_df):
+    """Stable content-based identity for a loaded dataset.
+
+    Used to group Profile Likelihood History entries by the underlying data
+    they were run against: regenerating/re-uploading the same trace yields
+    the same key, while any change to the actual Mean values yields a new one.
+    """
+    payload = data_label + "|" + ",".join(f"{v:.10g}" for v in data_df["Mean"].to_numpy(dtype=float))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def render_multi_start_results(results_df, param_names, derived_names, true_values, include_nonconverged):
@@ -116,6 +137,39 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
         st.dataframe(detail_df, hide_index=True)
 
 
+def render_profile_likelihood_result(profile_df, profile_target, true_value=None):
+    """Render the SSE-vs-value plot + raw data table for one profile likelihood run.
+
+    Shared by the Profile Likelihood tab (right after a run) and the Profile
+    Likelihood History tab (replaying a stored past run).
+    """
+    best_row = profile_df.loc[profile_df["sse"].idxmin()]
+    st.success(
+        f"Lowest SSE {best_row['sse']:.6g} at {profile_target} = {best_row['value']:.6g}"
+    )
+
+    fig_p, ax_p = plt.subplots(figsize=(8, 5))
+    ax_p.plot(profile_df["value"], profile_df["sse"], "o-", color="tab:blue")
+    ax_p.axvline(
+        best_row["value"], color="tab:green", linestyle="--",
+        label="Best-fit value (this profile)",
+    )
+    if true_value is not None:
+        ax_p.axvline(
+            true_value, color="tab:red", linestyle=":",
+            label="Synthetic input (true value)",
+        )
+    ax_p.set_xlabel(profile_target)
+    ax_p.set_ylabel("SSE (sum of squared residuals)")
+    ax_p.set_title(f"Profile likelihood: {profile_target}")
+    ax_p.legend(fontsize=8)
+    fig_p.tight_layout()
+    st.pyplot(fig_p)
+
+    with st.expander("Profile likelihood raw data"):
+        st.dataframe(profile_df, hide_index=True)
+
+
 # ---------------------------------------------------------
 # Streamlit UI
 # ---------------------------------------------------------
@@ -123,8 +177,11 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
 st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
 st.title("Fluorescent Protein Maturation Delay Model")
 
-sim_tab, data_tab, bode_tab, history_tab, profile_tab = st.tabs(
-    ["Simulation", "Least Squares Fitting", "Bode Plot", "History", "Profile Likelihood"]
+sim_tab, upload_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab = st.tabs(
+    [
+        "Simulation", "Data", "Least Squares Fitting", "Profile Likelihood", "Bode Plot",
+        "Multi-Start History", "Profile Likelihood History",
+    ]
 )
 
 model_choice = st.sidebar.radio(
@@ -244,13 +301,13 @@ with sim_tab:
     else:
         st.info("Set your parameters in the sidebar and click **Run Simulation**.")
 
-with data_tab:
+with upload_tab:
     st.markdown(
-        "Fit maturation model parameters to a fluorescence trace using "
-        "least-squares optimization. Either upload real experimental data "
-        "from a trench intensity CSV, or generate synthetic noisy data by "
-        "perturbing the simulation's rate constants with Gaussian noise and "
-        "re-integrating the model, then fit against it."
+        "Provide the fluorescence trace to fit against in the **Least Squares "
+        "Fitting** tab. Either upload real experimental data from a trench "
+        "intensity CSV, or generate synthetic noisy data by perturbing the "
+        "simulation's rate constants with Gaussian noise and re-integrating "
+        "the model."
     )
 
     data_source = st.radio(
@@ -386,6 +443,15 @@ with data_tab:
                 "kd": kd,
                 "alpha": alpha,
             }
+            st.session_state["noise_params"] = {
+                "km_noise_std": None if is_two_step else km_noise_std,
+                "k1_noise_std": k1_noise_std if is_two_step else None,
+                "k2_noise_std": k2_noise_std if is_two_step else None,
+                "kb_noise_std": kb_noise_std,
+                "measurement_noise_std": measurement_noise_std,
+                "seed": seed,
+                "measurement_seed": measurement_seed,
+            }
 
         if "synthetic_data_df" in st.session_state:
             data = st.session_state["synthetic_data_df"]
@@ -393,19 +459,44 @@ with data_tab:
         else:
             st.info("Click **Generate Synthetic Data** to create a synthetic trace.")
 
+    dataset_key = None
     if data is not None:
-                fig2, ax2 = plt.subplots(figsize=(9, 5))
-                ax2.plot(data["Time"], data["Mean"], marker="o", markersize=3)
-                ax2.set_xlabel("Time (sec)")
-                ax2.set_ylabel("Mean intensity")
-                ax2.set_title(data_label)
-                fig2.tight_layout()
+        fig2, ax2 = plt.subplots(figsize=(9, 5))
+        ax2.plot(data["Time"], data["Mean"], marker="o", markersize=3)
+        ax2.set_xlabel("Time (sec)")
+        ax2.set_ylabel("Mean intensity")
+        ax2.set_title(data_label)
+        fig2.tight_layout()
 
-                st.pyplot(fig2)
-                st.dataframe(data)
+        st.pyplot(fig2)
+        st.dataframe(data)
 
-                st.divider()
+        dataset_key = compute_dataset_key(data_label, data)
+        is_synthetic_source = data_source == "Generate synthetic data from simulation"
+        st.session_state.setdefault("dataset_info", {})[dataset_key] = {
+            "label": data_label,
+            "synthetic_params": st.session_state.get("synthetic_params") if is_synthetic_source else None,
+            "noise_params": st.session_state.get("noise_params") if is_synthetic_source else None,
+        }
+
+    st.session_state["current_data"] = data
+    st.session_state["current_data_label"] = data_label
+    st.session_state["current_data_source"] = data_source
+    st.session_state["current_dataset_key"] = dataset_key
+
+with fit_tab:
+    data = st.session_state.get("current_data")
+    data_label = st.session_state.get("current_data_label", "")
+    data_source = st.session_state.get("current_data_source")
+
+    if data is None:
+        st.info(
+            "No data loaded yet. Upload a CSV or generate synthetic data in "
+            "the **Data** tab first."
+        )
+    else:
                 st.subheader("Fit maturation model parameters to data")
+                st.caption(f"Using: {data_label}")
                 st.markdown(
                     "Select the region of the trace where the biological maturation "
                     "model applies (e.g. exclude segments dominated by photobleaching "
@@ -483,6 +574,10 @@ with data_tab:
                         current_param_names = ["I0", "km", "kb", "kd", "alpha"]
                         current_centers = [I0_guess, km_guess, kb_guess, kd_guess, alpha_guess]
                         current_bounds = ([0.0, 0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 5.0, 10.0])
+                    dataset_key = st.session_state.get("current_dataset_key")
+                    run_key = "|".join(str(v) for v in (
+                        dataset_key, fit_is_two_step, u_step, time_start, time_end, baseline,
+                    ))
                     st.session_state["current_fit_data"] = {
                         "t_fit": t_fit,
                         "F_meas": F_meas,
@@ -492,6 +587,12 @@ with data_tab:
                         "centers": current_centers,
                         "bounds": current_bounds,
                         "data_source": data_source,
+                        "dataset_key": dataset_key,
+                        "dataset_label": data_label,
+                        "run_key": run_key,
+                        "time_start": time_start,
+                        "time_end": time_end,
+                        "baseline": baseline,
                     }
 
                     fit_button = st.button("Fit Parameters", type="primary")
@@ -787,7 +888,7 @@ with data_tab:
                                 true_values["G"] = true_values["alpha"] * true_values["km"]
                                 true_values["G*I0"] = true_values["G"] * true_values["I0"]
 
-                        append_entry({
+                        append_multi_start_entry({
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             "fit_is_two_step": fit_is_two_step,
                             "data_source": data_source,
@@ -802,6 +903,140 @@ with data_tab:
                         render_multi_start_results(
                             results_df, param_names, derived_names, true_values, include_nonconverged,
                         )
+
+with profile_tab:
+    st.markdown(
+        "Profile likelihood: sweep one raw parameter or derived quantity across "
+        "a grid of fixed values. At each grid point, everything else is "
+        "re-optimized (a single least-squares fit, starting from an initial "
+        "guess drawn the same way as the multi-start fit) to fit as well as it "
+        "can around that fixed value, and the resulting SSE is recorded. A "
+        "sharply rising SSE away from the best-fit value means that "
+        "parameter/quantity is well-identified by the data; a flat profile "
+        "means it isn't — it can trade off against other parameters without "
+        "hurting the fit."
+    )
+
+    current_fit_data = st.session_state.get("current_fit_data")
+    if current_fit_data is None:
+        st.info(
+            "Select a data source and a fitting region with at least 5 points "
+            "in the **Least Squares Fitting** tab first (no need to click a "
+            "Fit button — just get past the region-selection step)."
+        )
+    else:
+        fit_is_two_step_p = current_fit_data["fit_is_two_step"]
+        param_names_p = current_fit_data["param_names"]
+        centers_p = current_fit_data["centers"]
+        bounds_p = current_fit_data["bounds"]
+        data_source_p = current_fit_data["data_source"]
+        derived_names_p = list(DERIVED_QUANTITY_FORMULAS[fit_is_two_step_p].keys())
+
+        st.caption(
+            f"Profiling against the {'2-step' if fit_is_two_step_p else '1-step'} "
+            "model and data/region currently selected in the Least Squares "
+            "Fitting tab."
+        )
+
+        synthetic_params_p = st.session_state.get("synthetic_params")
+        true_values_p = compute_true_values(synthetic_params_p, fit_is_two_step_p)
+
+        profile_target = st.selectbox(
+            "Parameter or derived quantity to profile",
+            options=param_names_p + derived_names_p,
+        )
+        is_derived = profile_target in derived_names_p
+
+        center_lookup = dict(zip(param_names_p, centers_p))
+        if profile_target in true_values_p:
+            default_center = true_values_p[profile_target]
+        elif profile_target in center_lookup:
+            default_center = center_lookup[profile_target]
+        else:
+            default_center = DERIVED_QUANTITY_FORMULAS[fit_is_two_step_p][profile_target](center_lookup)
+        default_center = max(float(default_center), 1e-6)
+
+        grid_col1, grid_col2, grid_col3 = st.columns(3)
+        with grid_col1:
+            grid_min = st.number_input(
+                "Grid min", value=default_center * 0.3, format="%.6f", key="profile_grid_min",
+            )
+        with grid_col2:
+            grid_max = st.number_input(
+                "Grid max", value=default_center * 3.0, format="%.6f", key="profile_grid_max",
+            )
+        with grid_col3:
+            grid_points = st.number_input(
+                "Grid points", min_value=3, value=8, step=1, key="profile_grid_points",
+            )
+
+        fit_col1, fit_col2 = st.columns(2)
+        with fit_col1:
+            profile_max_nfev = st.number_input(
+                "Max evaluations per fit", min_value=100, value=1000, step=100,
+                key="profile_max_nfev",
+            )
+        with fit_col2:
+            profile_seed_fix = st.checkbox(
+                "Fix random seed", value=False, key="profile_seed_fix",
+            )
+        profile_seed = None
+        if profile_seed_fix:
+            profile_seed = int(st.number_input(
+                "Profile random seed", min_value=0, value=0, step=1, key="profile_seed_val",
+            ))
+
+        run_profile_button = st.button("Run Profile Likelihood", type="primary")
+
+        if run_profile_button:
+            if grid_max <= grid_min:
+                st.error("Grid max must be greater than grid min.")
+            else:
+                grid_values = np.linspace(grid_min, grid_max, int(grid_points))
+                residual_fn_p = residuals_2step if fit_is_two_step_p else residuals_1step
+                fixed_p = {"u": current_fit_data["u_step"]}
+                args_p = (current_fit_data["t_fit"], current_fit_data["F_meas"], fixed_p)
+
+                with st.spinner(
+                    f"Computing profile likelihood for {profile_target} "
+                    f"({int(grid_points)} grid points)..."
+                ):
+                    if is_derived:
+                        profile_df = profile_derived_quantity(
+                            residual_fn_p, param_names_p, profile_target, fit_is_two_step_p,
+                            grid_values, centers_p, bounds_p, args_p,
+                            seed=profile_seed, max_nfev=int(profile_max_nfev),
+                        )
+                    else:
+                        profile_df = profile_raw_parameter(
+                            residual_fn_p, param_names_p, profile_target,
+                            grid_values, centers_p, bounds_p, args_p,
+                            seed=profile_seed, max_nfev=int(profile_max_nfev),
+                        )
+
+                dataset_key_p = current_fit_data.get("dataset_key")
+                dataset_info_p = st.session_state.get("dataset_info", {}).get(dataset_key_p, {})
+                true_value_p = true_values_p.get(profile_target)
+
+                append_profile_entry({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "dataset_key": dataset_key_p,
+                    "dataset_label": current_fit_data.get("dataset_label", dataset_info_p.get("label", "")),
+                    "synthetic_params": dataset_info_p.get("synthetic_params"),
+                    "noise_params": dataset_info_p.get("noise_params"),
+                    "run_key": current_fit_data.get("run_key"),
+                    "fit_is_two_step": fit_is_two_step_p,
+                    "u_step": current_fit_data["u_step"],
+                    "time_start": current_fit_data.get("time_start"),
+                    "time_end": current_fit_data.get("time_end"),
+                    "baseline": current_fit_data.get("baseline"),
+                    "profile_target": profile_target,
+                    "is_derived": is_derived,
+                    "true_value": true_value_p,
+                    "profile_df": profile_df,
+                })
+
+                render_profile_likelihood_result(profile_df, profile_target, true_value_p)
 
 with bode_tab:
     st.markdown(
@@ -925,7 +1160,7 @@ with bode_tab:
     else:
         st.info("Set the frequency range and click **Plot Bode Response**.")
 
-with history_tab:
+with ms_history_tab:
     st.markdown(
         "Every multi-start fit run, saved to disk (`multi_start_history.json`) "
         "so it survives app restarts — most recent first. Each entry keeps its "
@@ -935,7 +1170,7 @@ with history_tab:
         "sidebar parameters or running other fits since."
     )
 
-    history = load_history()
+    history = load_multi_start_history()
 
     if not history:
         st.info(
@@ -946,8 +1181,8 @@ with history_tab:
     else:
         clear_col1, clear_col2 = st.columns([3, 1])
         with clear_col2:
-            if st.button("Clear history"):
-                clear_history()
+            if st.button("Clear history", key="clear_ms_history"):
+                clear_multi_start_history()
                 st.rerun()
 
         for i in range(len(history) - 1, -1, -1):
@@ -977,7 +1212,7 @@ with history_tab:
                     delete_clicked = st.button("Delete", key=f"history_delete_{i}")
 
                 if delete_clicked:
-                    delete_entry(i)
+                    delete_multi_start_entry(i)
                     st.rerun()
 
                 if display_clicked:
@@ -986,155 +1221,124 @@ with history_tab:
                         entry["true_values"], hist_include_nonconverged,
                     )
 
-with profile_tab:
+with pl_history_tab:
     st.markdown(
-        "Profile likelihood: sweep one raw parameter or derived quantity across "
-        "a grid of fixed values. At each grid point, everything else is "
-        "re-optimized (with multiple random restarts) to fit as well as it can "
-        "around that fixed value, and the best achieved cost is recorded. A "
-        "sharply rising cost away from the best-fit value means that "
-        "parameter/quantity is well-identified by the data; a flat profile "
-        "means it isn't — it can trade off against other parameters without "
-        "hurting the fit. This is a stronger identifiability check than the "
-        "multi-start scatter alone, since every other parameter is actively "
-        "re-optimized at each point rather than left wherever a single fit "
-        "happened to land. **This can be slow** — each grid point re-runs the "
-        "full multi-start fitting machinery."
+        "Every profile likelihood run, saved to disk "
+        "(`profile_likelihood_history.json`) so it survives app restarts. "
+        "Runs are grouped by the **dataset** they were run against "
+        "(regenerating/re-uploading the same trace groups new runs alongside "
+        "past ones), then by **run** — one specific fitting region + model "
+        "choice, since multiple parameters/quantities can each be profiled "
+        "against the same run (e.g. Run 1: km, then Run 1: kb). Each dataset "
+        "group records the synthetic ground truth and noise settings used to "
+        "generate it, if applicable."
     )
 
-    current_fit_data = st.session_state.get("current_fit_data")
-    if current_fit_data is None:
+    pl_history = load_profile_history()
+
+    if not pl_history:
         st.info(
-            "Select a data source and a fitting region with at least 5 points "
-            "in the **Least Squares Fitting** tab first (no need to click a "
-            "Fit button — just get past the region-selection step)."
+            "No profile likelihood runs saved yet. Run one from the "
+            "**Profile Likelihood** tab."
         )
     else:
-        fit_is_two_step_p = current_fit_data["fit_is_two_step"]
-        param_names_p = current_fit_data["param_names"]
-        centers_p = current_fit_data["centers"]
-        bounds_p = current_fit_data["bounds"]
-        data_source_p = current_fit_data["data_source"]
-        derived_names_p = list(DERIVED_QUANTITY_FORMULAS[fit_is_two_step_p].keys())
+        clear_col1, clear_col2 = st.columns([3, 1])
+        with clear_col2:
+            if st.button("Clear history", key="clear_pl_history"):
+                clear_profile_history()
+                st.rerun()
 
-        st.caption(
-            f"Profiling against the {'2-step' if fit_is_two_step_p else '1-step'} "
-            "model and data/region currently selected in the Least Squares "
-            "Fitting tab."
-        )
+        # Group entries by dataset, preserving first-seen (oldest-first) order.
+        datasets = {}
+        dataset_order = []
+        for idx, entry in enumerate(pl_history):
+            dk = entry["dataset_key"]
+            if dk not in datasets:
+                datasets[dk] = {
+                    "label": entry["dataset_label"],
+                    "synthetic_params": entry["synthetic_params"],
+                    "noise_params": entry["noise_params"],
+                    "entries": [],
+                }
+                dataset_order.append(dk)
+            datasets[dk]["entries"].append((idx, entry))
 
-        synthetic_params_p = st.session_state.get("synthetic_params")
-        true_values_p = compute_true_values(synthetic_params_p, fit_is_two_step_p)
+        for dk in reversed(dataset_order):  # most recently seen dataset first
+            group = datasets[dk]
 
-        profile_target = st.selectbox(
-            "Parameter or derived quantity to profile",
-            options=param_names_p + derived_names_p,
-        )
-        is_derived = profile_target in derived_names_p
+            # Group this dataset's entries by run, numbering runs in first-seen order.
+            runs = {}
+            run_order = []
+            for idx, entry in group["entries"]:
+                rk = entry["run_key"]
+                if rk not in runs:
+                    runs[rk] = []
+                    run_order.append(rk)
+                runs[rk].append((idx, entry))
 
-        center_lookup = dict(zip(param_names_p, centers_p))
-        if profile_target in true_values_p:
-            default_center = true_values_p[profile_target]
-        elif profile_target in center_lookup:
-            default_center = center_lookup[profile_target]
-        else:
-            default_center = DERIVED_QUANTITY_FORMULAS[fit_is_two_step_p][profile_target](center_lookup)
-        default_center = max(float(default_center), 1e-6)
+            with st.container(border=True):
+                st.markdown(f"**Dataset: {group['label']}**")
 
-        grid_col1, grid_col2, grid_col3 = st.columns(3)
-        with grid_col1:
-            grid_min = st.number_input(
-                "Grid min", value=default_center * 0.3, format="%.6f", key="profile_grid_min",
-            )
-        with grid_col2:
-            grid_max = st.number_input(
-                "Grid max", value=default_center * 3.0, format="%.6f", key="profile_grid_max",
-            )
-        with grid_col3:
-            grid_points = st.number_input(
-                "Grid points", min_value=3, value=8, step=1, key="profile_grid_points",
-            )
-
-        restart_col1, restart_col2, restart_col3 = st.columns(3)
-        with restart_col1:
-            n_restarts_p = st.number_input(
-                "Random restarts per grid point", min_value=1, value=4, step=1,
-                key="profile_n_restarts",
-            )
-        with restart_col2:
-            profile_max_nfev = st.number_input(
-                "Max evaluations per restart", min_value=100, value=400, step=100,
-                key="profile_max_nfev",
-            )
-        with restart_col3:
-            profile_seed_fix = st.checkbox(
-                "Fix random seed", value=False, key="profile_seed_fix",
-            )
-        profile_seed = None
-        if profile_seed_fix:
-            profile_seed = int(st.number_input(
-                "Profile random seed", min_value=0, value=0, step=1, key="profile_seed_val",
-            ))
-
-        st.caption(
-            f"Worst case: {int(grid_points)} grid points x {int(n_restarts_p)} "
-            "restarts = "
-            f"{int(grid_points) * int(n_restarts_p)} optimization runs."
-        )
-
-        run_profile_button = st.button("Run Profile Likelihood", type="primary")
-
-        if run_profile_button:
-            if grid_max <= grid_min:
-                st.error("Grid max must be greater than grid min.")
-            else:
-                grid_values = np.linspace(grid_min, grid_max, int(grid_points))
-                residual_fn_p = residuals_2step if fit_is_two_step_p else residuals_1step
-                fixed_p = {"u": current_fit_data["u_step"]}
-                args_p = (current_fit_data["t_fit"], current_fit_data["F_meas"], fixed_p)
-
-                with st.spinner(
-                    f"Computing profile likelihood for {profile_target} "
-                    f"({int(grid_points)} grid points x {int(n_restarts_p)} restarts)..."
-                ):
-                    if is_derived:
-                        profile_df = profile_derived_quantity(
-                            residual_fn_p, param_names_p, profile_target, fit_is_two_step_p,
-                            grid_values, centers_p, bounds_p, args_p,
-                            n_restarts=int(n_restarts_p), seed=profile_seed,
-                            max_nfev=int(profile_max_nfev),
-                        )
+                synthetic_params = group["synthetic_params"]
+                noise_params = group["noise_params"]
+                if synthetic_params is not None:
+                    truth_bits = []
+                    if synthetic_params.get("is_two_step"):
+                        truth_bits.append(f"k1={synthetic_params['k1']:.4g}")
+                        truth_bits.append(f"k2={synthetic_params['k2']:.4g}")
                     else:
-                        profile_df = profile_raw_parameter(
-                            residual_fn_p, param_names_p, profile_target,
-                            grid_values, centers_p, bounds_p, args_p,
-                            n_restarts=int(n_restarts_p), seed=profile_seed,
-                            max_nfev=int(profile_max_nfev),
-                        )
+                        truth_bits.append(f"km={synthetic_params['km']:.4g}")
+                    truth_bits.append(f"I0={synthetic_params['I0']:.4g}")
+                    truth_bits.append(f"kb={synthetic_params['kb']:.4g}")
+                    truth_bits.append(f"kd={synthetic_params['kd']:.4g}")
+                    truth_bits.append(f"alpha={synthetic_params['alpha']:.4g}")
+                    st.caption("Synthetic input: " + ", ".join(truth_bits))
 
-                best_row = profile_df.loc[profile_df["cost"].idxmin()]
-                st.success(
-                    f"Best cost {best_row['cost']:.6g} at "
-                    f"{profile_target} = {best_row['value']:.6g}"
-                )
+                    if noise_params is not None:
+                        noise_bits = []
+                        for key in ("km_noise_std", "k1_noise_std", "k2_noise_std", "kb_noise_std"):
+                            val = noise_params.get(key)
+                            if val is not None:
+                                noise_bits.append(f"{key}={val:.4g}")
+                        if noise_params.get("measurement_noise_std") is not None:
+                            noise_bits.append(
+                                f"measurement_noise_std={noise_params['measurement_noise_std']:.4g}"
+                            )
+                        seed_val = noise_params.get("seed")
+                        noise_bits.append(f"seed={seed_val if seed_val is not None else 'random'}")
+                        st.caption("Noise added: " + ", ".join(noise_bits))
+                else:
+                    st.caption("Experimental data (no synthetic ground truth).")
 
-                fig_p, ax_p = plt.subplots(figsize=(8, 5))
-                ax_p.plot(profile_df["value"], profile_df["cost"], "o-", color="tab:blue")
-                ax_p.axvline(
-                    best_row["value"], color="tab:green", linestyle="--",
-                    label="Best-fit value (this profile)",
-                )
-                if profile_target in true_values_p:
-                    ax_p.axvline(
-                        true_values_p[profile_target], color="tab:red", linestyle=":",
-                        label="Synthetic input (true value)",
+                for n, rk in enumerate(run_order, start=1):
+                    run_entries = runs[rk]
+                    first_entry = run_entries[0][1]
+                    model_label = "2-step" if first_entry["fit_is_two_step"] else "1-step"
+                    st.markdown(
+                        f"Run {n} — {model_label} model, "
+                        f"t=[{first_entry['time_start']:.4g}, {first_entry['time_end']:.4g}] sec, "
+                        f"baseline={first_entry['baseline']:.4g}, u={first_entry['u_step']:.4g}"
                     )
-                ax_p.set_xlabel(profile_target)
-                ax_p.set_ylabel("Min. sum-of-squared residuals")
-                ax_p.set_title(f"Profile likelihood: {profile_target}")
-                ax_p.legend(fontsize=8)
-                fig_p.tight_layout()
-                st.pyplot(fig_p)
 
-                with st.expander("Profile likelihood raw data"):
-                    st.dataframe(profile_df, hide_index=True)
+                    for idx, entry in run_entries:
+                        kind_label = "derived quantity" if entry["is_derived"] else "raw parameter"
+
+                        row_col1, row_col2, row_col3 = st.columns([3, 1, 1])
+                        with row_col1:
+                            st.markdown(
+                                f"&nbsp;&nbsp;**{entry['profile_target']}** ({kind_label}) "
+                                f"— {entry['timestamp']}"
+                            )
+                        with row_col2:
+                            display_clicked_p = st.button("Display", key=f"pl_history_display_{idx}")
+                        with row_col3:
+                            delete_clicked_p = st.button("Delete", key=f"pl_history_delete_{idx}")
+
+                        if delete_clicked_p:
+                            delete_profile_entry(idx)
+                            st.rerun()
+
+                        if display_clicked_p:
+                            render_profile_likelihood_result(
+                                entry["profile_df"], entry["profile_target"], entry["true_value"],
+                            )

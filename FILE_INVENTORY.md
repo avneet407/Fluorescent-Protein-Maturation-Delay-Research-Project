@@ -124,6 +124,3 @@ matplotlib `Figure`; the caller (`streamlit_app.py`) displays it via
 
 Python dependencies: `numpy`, `matplotlib`, `scipy`, `streamlit`, `pandas`.
 
-## README.md
-
-Project title only; no additional documentation yet.

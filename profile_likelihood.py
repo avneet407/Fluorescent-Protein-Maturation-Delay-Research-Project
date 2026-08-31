@@ -2,20 +2,18 @@
 
 For a chosen raw parameter (e.g. `km`) or derived quantity (e.g. `a = km + kd`),
 sweeps it across a grid of fixed values. At each grid point, everything else is
-re-optimized as best it can to compensate (with multiple random restarts, reusing
-the multi-start fitting machinery), and the best (minimum) achieved
-sum-of-squared-residuals cost is recorded. The resulting cost-vs-value curve is
-the profile likelihood: a sharp rise away from the best-fit value means that
-parameter/quantity is well-identified by the data; a flat profile means it isn't
-(it can trade off against other parameters without hurting the fit) — this is a
-more rigorous identifiability check than looking at multi-start scatter alone,
-since here every other parameter is actively re-optimized at each grid point
-rather than left wherever a single fit happened to land.
+re-optimized as best it can to compensate via a single `least_squares` run
+(initial guess drawn the same log-uniform way `multi_start_fit.run_multi_start`
+draws one), and the achieved sum-of-squared-residuals (SSE) is recorded. The
+resulting SSE-vs-value curve is the profile likelihood: a sharp rise away from
+the best-fit value means that parameter/quantity is well-identified by the
+data; a flat profile means it isn't (it can trade off against other
+parameters without hurting the fit).
 
 Both profiling functions reuse the exact same `residual_fn`, `bounds`, and
 `args = (t, F_meas, fixed)` the rest of the app's fitting already uses, and the
-same fixed dataset is passed through unchanged for every grid point and restart
-— nothing here regenerates data.
+same fixed dataset is passed through unchanged for every grid point — nothing
+here regenerates data.
 
 Derived quantities are profiled by reparametrization rather than a general
 constrained optimizer (e.g. SLSQP): one raw parameter is treated as "computed"
@@ -30,8 +28,9 @@ works well elsewhere in this app is far more reliable.
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import least_squares
 
-from multi_start_fit import run_multi_start
+from multi_start_fit import sample_initial_guess
 
 # Derived-quantity formulas, keyed by `fit_is_two_step`, then by quantity name.
 # Each formula takes a dict of {raw_param_name: value} and returns the derived value.
@@ -101,17 +100,25 @@ def compute_true_values(synthetic_params, fit_is_two_step):
     return true_values
 
 
+def _clip_to_bounds(x0, bounds, eps=1e-9):
+    lower, upper = bounds
+    lower = np.asarray(lower, dtype=float)
+    upper = np.asarray(upper, dtype=float)
+    return np.clip(x0, lower + eps, upper - eps)
+
+
 def profile_raw_parameter(
     residual_fn, param_names, fix_name, grid_values, centers, bounds, args,
-    n_restarts, seed=None, decade_span=1.0, max_nfev=1000,
+    seed=None, decade_span=1.0, max_nfev=1000,
 ):
     """Profile likelihood for one raw parameter.
 
-    At each grid value, fixes `fix_name` to that value and re-runs multi-start
-    least-squares (`multi_start_fit.run_multi_start`) over the remaining free
-    parameters. Returns a DataFrame with one row per grid point: `value`
-    (the fixed value), `cost` (minimum achieved across restarts),
-    `converged` (whether that best run converged), and the best-fit value of
+    At each grid value, fixes `fix_name` to that value and runs a single
+    `least_squares` fit over the remaining free parameters, starting from an
+    initial guess drawn log-uniform around `centers` (the same way
+    `multi_start_fit.run_multi_start` draws one). Returns a DataFrame with one
+    row per grid point: `value` (the fixed value), `sse` (sum of squared
+    residuals at the fitted solution), `converged`, and the fitted value of
     every other free parameter.
     """
     fix_idx = param_names.index(fix_name)
@@ -123,22 +130,25 @@ def profile_raw_parameter(
     free_upper = [b for n, b in zip(param_names, upper) if n != fix_name]
     free_bounds = (free_lower, free_upper)
 
+    rng = np.random.default_rng(seed)
     rows = []
-    for i, value in enumerate(grid_values):
+    for value in grid_values:
         def wrapped_residual_fn(x_free, *rargs, _value=float(value), _fix_idx=fix_idx):
             x_full = np.insert(np.asarray(x_free, dtype=float), _fix_idx, _value)
             return residual_fn(x_full, *rargs)
 
-        run_seed = None if seed is None else seed + i
-        results_df = run_multi_start(
-            wrapped_residual_fn, free_names, free_centers, free_bounds, args,
-            n_runs=n_restarts, seed=run_seed, decade_span=decade_span, max_nfev=max_nfev,
-        )
-        best = results_df.loc[results_df["cost"].idxmin()]
+        x0 = sample_initial_guess(free_centers, rng, decade_span=decade_span)
+        x0 = _clip_to_bounds(x0, free_bounds)
 
-        row = {"value": float(value), "cost": float(best["cost"]), "converged": bool(best["converged"])}
-        for name in free_names:
-            row[name] = float(best[name])
+        fit = least_squares(wrapped_residual_fn, x0, bounds=free_bounds, args=args, max_nfev=max_nfev)
+
+        row = {
+            "value": float(value),
+            "sse": float(np.sum(fit.fun ** 2)),
+            "converged": bool(fit.success),
+        }
+        for name, fitted in zip(free_names, fit.x):
+            row[name] = float(fitted)
         rows.append(row)
 
     return pd.DataFrame(rows)
@@ -146,15 +156,16 @@ def profile_raw_parameter(
 
 def profile_derived_quantity(
     residual_fn, param_names, quantity_name, fit_is_two_step, grid_values, centers, bounds, args,
-    n_restarts, seed=None, decade_span=1.0, max_nfev=1000,
+    seed=None, decade_span=1.0, max_nfev=1000,
 ):
     """Profile likelihood for one derived quantity, via reparametrization.
 
     One raw parameter (`computed_param`, per `DERIVED_QUANTITY_REPARAM`) is
     computed at every residual evaluation from the free parameters and the
-    fixed grid value (e.g. `kd = a_target - km`), and least-squares optimizes
-    over the remaining free raw parameters — exactly like `profile_raw_parameter`,
-    just with a dynamically-computed "fixed" value instead of a constant one.
+    fixed grid value (e.g. `kd = a_target - km`), and a single `least_squares`
+    fit optimizes over the remaining free raw parameters — exactly like
+    `profile_raw_parameter`, just with a dynamically-computed "fixed" value
+    instead of a constant one.
 
     Values of `computed_param` outside its own natural range (e.g. negative
     kd) are not rejected — the resulting poor fit residuals penalize them
@@ -163,9 +174,9 @@ def profile_derived_quantity(
     `G`/`G*I0`/`G3`/`G3*I0`) are guarded against explicitly, since those would
     otherwise produce NaN/Inf that break the ODE solver.
 
-    Returns a DataFrame with one row per grid point: `value`, `cost` (minimum
-    achieved across restarts), `converged`, and the best-fit value of every
-    raw parameter (including the computed one) at that point.
+    Returns a DataFrame with one row per grid point: `value`, `sse` (sum of
+    squared residuals at the fitted solution), `converged`, and the fitted
+    value of every raw parameter (including the computed one) at that point.
     """
     computed_param, solve_computed = DERIVED_QUANTITY_REPARAM[fit_is_two_step][quantity_name]
     free_names = [n for n in param_names if n != computed_param]
@@ -177,8 +188,9 @@ def profile_derived_quantity(
     free_upper = [bounds_by_name[n][1] for n in free_names]
     free_bounds = (free_lower, free_upper)
 
+    rng = np.random.default_rng(seed)
     rows = []
-    for i, value in enumerate(grid_values):
+    for value in grid_values:
         value = float(value)
 
         def wrapped_residual_fn(x_free, *rargs, _value=value):
@@ -195,18 +207,20 @@ def profile_derived_quantity(
             x_full = np.array([full[n] for n in param_names])
             return residual_fn(x_full, *rargs)
 
-        run_seed = None if seed is None else seed + i
-        results_df = run_multi_start(
-            wrapped_residual_fn, free_names, free_centers, free_bounds, args,
-            n_runs=n_restarts, seed=run_seed, decade_span=decade_span, max_nfev=max_nfev,
-        )
-        best = results_df.loc[results_df["cost"].idxmin()]
+        x0 = sample_initial_guess(free_centers, rng, decade_span=decade_span)
+        x0 = _clip_to_bounds(x0, free_bounds)
 
-        free_best = {name: float(best[name]) for name in free_names}
+        fit = least_squares(wrapped_residual_fn, x0, bounds=free_bounds, args=args, max_nfev=max_nfev)
+
+        free_best = dict(zip(free_names, fit.x))
         computed_value = solve_computed(free_best, value)
 
-        row = {"value": value, "cost": float(best["cost"]), "converged": bool(best["converged"])}
-        row.update(free_best)
+        row = {
+            "value": value,
+            "sse": float(np.sum(fit.fun ** 2)),
+            "converged": bool(fit.success),
+        }
+        row.update({name: float(v) for name, v in free_best.items()})
         row[computed_param] = float(computed_value)
         rows.append(row)
 

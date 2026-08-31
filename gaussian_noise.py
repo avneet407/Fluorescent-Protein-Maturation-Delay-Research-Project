@@ -18,7 +18,7 @@ def _noisy_rate(nominal, std, rng):
 
 
 def add_measurement_noise(F, std, seed=None):
-    """Add iid Gaussian measurement noise directly to an intensity trace.
+    """Add Gaussian measurement noise directly to an intensity trace.
 
     Unlike the rate-constant noise above (which perturbs the underlying
     dynamics), this models readout/measurement noise (e.g. camera/shot
