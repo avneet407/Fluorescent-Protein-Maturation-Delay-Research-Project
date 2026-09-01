@@ -89,7 +89,12 @@ def delete_multi_start_entry(index):
 # ---------------------------------------------------------
 
 def _profile_entry_to_record(entry):
-    """Convert one in-memory profile likelihood entry (with a DataFrame) to a JSON-safe dict."""
+    """Convert one in-memory profile likelihood entry (with a DataFrame) to a JSON-safe dict.
+
+    `profile_type` distinguishes a single-quantity sweep ("1d", the default)
+    from a joint (a, b) sweep ("2d"); the latter uses `true_a`/`true_b`
+    instead of `true_value`.
+    """
     return {
         "timestamp": entry["timestamp"],
         "dataset_key": entry["dataset_key"],
@@ -102,9 +107,12 @@ def _profile_entry_to_record(entry):
         "time_start": entry["time_start"],
         "time_end": entry["time_end"],
         "baseline": entry["baseline"],
+        "profile_type": entry.get("profile_type", "1d"),
         "profile_target": entry["profile_target"],
-        "is_derived": bool(entry["is_derived"]),
+        "is_derived": bool(entry.get("is_derived", False)),
         "true_value": entry.get("true_value"),
+        "true_a": entry.get("true_a"),
+        "true_b": entry.get("true_b"),
         "profile_records": json.loads(entry["profile_df"].to_json(orient="records")),
     }
 

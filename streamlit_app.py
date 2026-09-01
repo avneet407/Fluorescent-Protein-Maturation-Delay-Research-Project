@@ -46,6 +46,7 @@ from profile_likelihood import (
     DERIVED_QUANTITY_FORMULAS,
     compute_true_values,
 )
+from profile_likelihood_2D import profile_ab_2d, plot_profile_2d
 
 
 def compute_dataset_key(data_label, data_df):
@@ -167,6 +168,24 @@ def render_profile_likelihood_result(profile_df, profile_target, true_value=None
     st.pyplot(fig_p)
 
     with st.expander("Profile likelihood raw data"):
+        st.dataframe(profile_df, hide_index=True)
+
+
+def render_profile_2d_result(profile_df):
+    """Render the 2D (a, b) SSE contour plot + raw data table for one 2D profile likelihood run.
+
+    Shared by the Profile Likelihood tab (right after a run) and the Profile
+    Likelihood History tab (replaying a stored past run).
+    """
+    best_row = profile_df.loc[profile_df["sse"].idxmin()]
+    st.success(
+        f"Lowest SSE {best_row['sse']:.6g} at a = {best_row['a']:.6g}, b = {best_row['b']:.6g}"
+    )
+
+    fig = plot_profile_2d(profile_df)
+    st.pyplot(fig)
+
+    with st.expander("2D profile likelihood raw data"):
         st.dataframe(profile_df, hide_index=True)
 
 
@@ -948,13 +967,17 @@ with profile_tab:
         is_derived = profile_target in derived_names_p
 
         center_lookup = dict(zip(param_names_p, centers_p))
-        if profile_target in true_values_p:
-            default_center = true_values_p[profile_target]
-        elif profile_target in center_lookup:
-            default_center = center_lookup[profile_target]
-        else:
-            default_center = DERIVED_QUANTITY_FORMULAS[fit_is_two_step_p][profile_target](center_lookup)
-        default_center = max(float(default_center), 1e-6)
+
+        def _profile_default_value(name):
+            if name in true_values_p:
+                val = true_values_p[name]
+            elif name in center_lookup:
+                val = center_lookup[name]
+            else:
+                val = DERIVED_QUANTITY_FORMULAS[fit_is_two_step_p][name](center_lookup)
+            return max(float(val), 1e-6)
+
+        default_center = _profile_default_value(profile_target)
 
         grid_col1, grid_col2, grid_col3 = st.columns(3)
         with grid_col1:
@@ -1030,6 +1053,7 @@ with profile_tab:
                     "time_start": current_fit_data.get("time_start"),
                     "time_end": current_fit_data.get("time_end"),
                     "baseline": current_fit_data.get("baseline"),
+                    "profile_type": "1d",
                     "profile_target": profile_target,
                     "is_derived": is_derived,
                     "true_value": true_value_p,
@@ -1037,6 +1061,107 @@ with profile_tab:
                 })
 
                 render_profile_likelihood_result(profile_df, profile_target, true_value_p)
+
+        st.divider()
+        st.subheader("2D Profile Likelihood: a vs b")
+        st.markdown(
+            "Jointly sweeps `a = km+kd` (or `k1+kd`) and `b = kb+kd` over the "
+            "same grid, re-optimizing the remaining free parameters at each "
+            "(a, b) point. This is the direct visual test for the a/b "
+            "exchange degeneracy: a second low-SSE region near the mirror "
+            "point (b_true, a_true), in addition to the true "
+            "(a_true, b_true), means the fit can equally well explain the "
+            "data with the two decay rates' physical roles swapped."
+        )
+
+        default_a = _profile_default_value("a")
+        default_b = _profile_default_value("b")
+        # Default both axes to span the same range, wide enough to cover both
+        # a's and b's own default value -- so the mirror point (b_true, a_true)
+        # is visible by default. Each axis can still be narrowed/widened
+        # independently below.
+        default_ab_lo = min(default_a, default_b) * 0.3
+        default_ab_hi = max(default_a, default_b) * 3.0
+
+        ab_bounds_col1, ab_bounds_col2 = st.columns(2)
+        with ab_bounds_col1:
+            st.markdown("**a bounds**")
+            a_grid_min = st.number_input(
+                "a grid min", value=default_ab_lo, format="%.6f", key="profile_a_grid_min",
+            )
+            a_grid_max = st.number_input(
+                "a grid max", value=default_ab_hi, format="%.6f", key="profile_a_grid_max",
+            )
+        with ab_bounds_col2:
+            st.markdown("**b bounds**")
+            b_grid_min = st.number_input(
+                "b grid min", value=default_ab_lo, format="%.6f", key="profile_b_grid_min",
+            )
+            b_grid_max = st.number_input(
+                "b grid max", value=default_ab_hi, format="%.6f", key="profile_b_grid_max",
+            )
+
+        ab_grid_points = st.number_input(
+            "Grid points per axis", min_value=3, value=8, step=1, key="profile_ab_grid_points",
+        )
+
+        st.caption(
+            f"Worst case: {int(ab_grid_points)}² = "
+            f"{int(ab_grid_points) ** 2} optimization runs. Reuses the "
+            "\"Max evaluations per fit\" and random seed settings above."
+        )
+
+        run_2d_button = st.button("Run 2D Profile Likelihood (a, b)")
+
+        if run_2d_button:
+            if a_grid_max <= a_grid_min:
+                st.error("a grid max must be greater than a grid min.")
+            elif b_grid_max <= b_grid_min:
+                st.error("b grid max must be greater than b grid min.")
+            else:
+                a_values = np.linspace(a_grid_min, a_grid_max, int(ab_grid_points))
+                b_values = np.linspace(b_grid_min, b_grid_max, int(ab_grid_points))
+                residual_fn_p = residuals_2step if fit_is_two_step_p else residuals_1step
+                fixed_p = {"u": current_fit_data["u_step"]}
+                args_p = (current_fit_data["t_fit"], current_fit_data["F_meas"], fixed_p)
+
+                with st.spinner(
+                    f"Computing 2D profile likelihood over a, b "
+                    f"({int(ab_grid_points)}² grid points)..."
+                ):
+                    profile_2d_df = profile_ab_2d(
+                        residual_fn_p, param_names_p, fit_is_two_step_p,
+                        a_values, b_values, centers_p, bounds_p, args_p,
+                        seed=profile_seed, max_nfev=int(profile_max_nfev),
+                    )
+
+                dataset_key_p2 = current_fit_data.get("dataset_key")
+                dataset_info_p2 = st.session_state.get("dataset_info", {}).get(dataset_key_p2, {})
+                true_a_p = true_values_p.get("a")
+                true_b_p = true_values_p.get("b")
+
+                append_profile_entry({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "dataset_key": dataset_key_p2,
+                    "dataset_label": current_fit_data.get("dataset_label", dataset_info_p2.get("label", "")),
+                    "synthetic_params": dataset_info_p2.get("synthetic_params"),
+                    "noise_params": dataset_info_p2.get("noise_params"),
+                    "run_key": current_fit_data.get("run_key"),
+                    "fit_is_two_step": fit_is_two_step_p,
+                    "u_step": current_fit_data["u_step"],
+                    "time_start": current_fit_data.get("time_start"),
+                    "time_end": current_fit_data.get("time_end"),
+                    "baseline": current_fit_data.get("baseline"),
+                    "profile_type": "2d",
+                    "profile_target": "2D a, b",
+                    "is_derived": True,
+                    "true_value": None,
+                    "true_a": true_a_p,
+                    "true_b": true_b_p,
+                    "profile_df": profile_2d_df,
+                })
+
+                render_profile_2d_result(profile_2d_df)
 
 with bode_tab:
     st.markdown(
@@ -1321,14 +1446,22 @@ with pl_history_tab:
                     )
 
                     for idx, entry in run_entries:
-                        kind_label = "derived quantity" if entry["is_derived"] else "raw parameter"
-
-                        row_col1, row_col2, row_col3 = st.columns([3, 1, 1])
-                        with row_col1:
-                            st.markdown(
+                        profile_type = entry.get("profile_type", "1d")
+                        if profile_type == "2d":
+                            label_line = (
+                                f"&nbsp;&nbsp;**{entry['profile_target']}** "
+                                f"— {entry['timestamp']}"
+                            )
+                        else:
+                            kind_label = "derived quantity" if entry["is_derived"] else "raw parameter"
+                            label_line = (
                                 f"&nbsp;&nbsp;**{entry['profile_target']}** ({kind_label}) "
                                 f"— {entry['timestamp']}"
                             )
+
+                        row_col1, row_col2, row_col3 = st.columns([3, 1, 1])
+                        with row_col1:
+                            st.markdown(label_line)
                         with row_col2:
                             display_clicked_p = st.button("Display", key=f"pl_history_display_{idx}")
                         with row_col3:
@@ -1339,6 +1472,9 @@ with pl_history_tab:
                             st.rerun()
 
                         if display_clicked_p:
-                            render_profile_likelihood_result(
-                                entry["profile_df"], entry["profile_target"], entry["true_value"],
-                            )
+                            if profile_type == "2d":
+                                render_profile_2d_result(entry["profile_df"])
+                            else:
+                                render_profile_likelihood_result(
+                                    entry["profile_df"], entry["profile_target"], entry["true_value"],
+                                )
