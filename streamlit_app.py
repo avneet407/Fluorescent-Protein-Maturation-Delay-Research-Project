@@ -16,6 +16,10 @@ from Maturation_Models import (
     residuals_1step,
     residuals_2step,
 )
+from Bleaching_Only_Model import (
+    model_bleach,
+    simulate_bleach,
+)
 from bode_plot import (
     bode_1step,
     bode_2step,
@@ -196,85 +200,186 @@ def render_profile_2d_result(profile_df):
 st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
 st.title("Fluorescent Protein Maturation Delay Model")
 
-sim_tab, upload_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab = st.tabs(
+bleach_tab, sim_tab, upload_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab = st.tabs(
     [
-        "Simulation", "Data", "Least Squares Fitting", "Profile Likelihood", "Bode Plot",
-        "Multi-Start History", "Profile Likelihood History",
+        "Bleaching Only Simulation", "Simulation", "Data", "Least Squares Fitting", "Profile Likelihood",
+        "Bode Plot", "Multi-Start History", "Profile Likelihood History",
     ]
 )
 
-model_choice = st.sidebar.radio(
-    "Maturation model",
-    options=["1-step (I -> M)", "2-step (I -> X -> M)"],
-)
-is_two_step = model_choice.startswith("2")
-
-st.sidebar.header("Initial conditions")
-I0 = st.sidebar.number_input(
-    "I0 - immature protein at t=0", min_value=0.0, value=100.0, step=10.0,
-    help="Suggested: 100. Pool of just-translated protein present when translation is halted.",
-)
-X0 = 0.0
-if is_two_step:
-    X0 = st.sidebar.number_input(
-        "X0 - intermediate protein at t=0", min_value=0.0, value=0.0, step=10.0,
-        help="Suggested: 0. Usually no protein has reached the intermediate stage yet.",
-    )
-M0 = st.sidebar.number_input(
-    "M0 - mature (fluorescent) protein at t=0", min_value=0.0, value=0.0, step=10.0,
-    help="Suggested: 0. No protein has finished maturing at t=0.",
-)
-B0 = st.sidebar.number_input(
-    "B0 - bleached protein at t=0", min_value=0.0, value=0.0, step=10.0,
-    help="Suggested: 0. No photobleaching has occurred yet.",
-)
-
-st.sidebar.header("Rate constants")
-if is_two_step:
-    k1 = st.sidebar.number_input(
-        "k1 - rate I -> X", min_value=0.0, value=0.20, step=0.01, format="%.3f",
-        help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.20.",
-    )
-    k2 = st.sidebar.number_input(
-        "k2 - rate X -> M", min_value=0.0, value=0.10, step=0.01, format="%.3f",
-        help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.10.",
-    )
-else:
-    km = st.sidebar.number_input(
-        "km - rate I -> M", min_value=0.0, value=0.15, step=0.01, format="%.3f",
-        help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.15.",
+with bleach_tab:
+    st.markdown(
+        "Models cells whose FP is already fully matured when imaging starts, "
+        "so I(t) ~ 0 throughout and no new mature protein is produced. The "
+        "mature pool only decays, via photobleaching and dilution:\n\n"
+        "dM/dt = -kb*M - kd*M = -b*M,  b = kb + kd\n\n"
+        "with M(0) = M0. This has the closed form M(t) = M0 * exp(-b*t), "
+        "so F(t) = alpha*M(t) = A*exp(-b*t) with lumped amplitude A = alpha*M0. "
+        "Adjust the initial condition and rate constants below, then click "
+        "**Run Simulation**."
     )
 
-kd = st.sidebar.number_input(
-    "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
-    help="Suggested range: 0.001-0.05 /sec. Applies to all species. Illustrative default: 0.01.",
-)
-kb = st.sidebar.number_input(
-    "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.02, step=0.005, format="%.4f",
-    help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02.",
-)
-u = st.sidebar.number_input(
-    "u - production rate", min_value=0.0, value=0.0, step=0.1, format="%.3f",
-    help="Suggested: 0 if translation is blocked (e.g. chloramphenicol chase). "
-         "Use a positive value to model ongoing translation.",
-)
-alpha = st.sidebar.number_input(
-    "alpha - fluorescence scaling factor", min_value=0.0, value=1.0, step=0.1,
-    help="Suggested: 1.0. Brightness per unit mature protein.",
-)
+    bleach_ic_cols = st.columns(4)
+    with bleach_ic_cols[0]:
+        M0_bleach = st.number_input(
+            "M0 - mature (fluorescent) protein at t=0", min_value=0.0, value=100.0, step=10.0,
+            help="Suggested: 100. Fluorescence already present in the cell when imaging starts.",
+            key="bleach_M0",
+        )
+    with bleach_ic_cols[1]:
+        B0_bleach = st.number_input(
+            "B0 - bleached protein at t=0", min_value=0.0, value=0.0, step=10.0,
+            help="Suggested: 0. No photobleaching has occurred yet.",
+            key="bleach_B0",
+        )
 
-st.sidebar.header("Simulation time")
-t_end = st.sidebar.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0)
-n_points = st.sidebar.number_input("Number of time points", min_value=10, value=300, step=10)
+    bleach_rc_cols = st.columns(4)
+    with bleach_rc_cols[0]:
+        kb_bleach = st.number_input(
+            "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.02, step=0.005, format="%.4f",
+            help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02.",
+            key="bleach_kb",
+        )
+    with bleach_rc_cols[1]:
+        kd_bleach = st.number_input(
+            "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
+            help="Suggested range: 0.001-0.05 /sec. Illustrative default: 0.01.",
+            key="bleach_kd",
+        )
+    with bleach_rc_cols[2]:
+        alpha_bleach = st.number_input(
+            "alpha - fluorescence scaling factor", min_value=0.0, value=1.0, step=0.1,
+            help="Suggested: 1.0. Brightness per unit mature protein.",
+            key="bleach_alpha",
+        )
 
-run = st.sidebar.button("Run Simulation", type="primary")
+    bleach_st_cols = st.columns(3)
+    with bleach_st_cols[0]:
+        t_end_bleach = st.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0, key="bleach_t_end")
+    with bleach_st_cols[1]:
+        n_points_bleach = st.number_input(
+            "Number of time points", min_value=10, value=300, step=10, key="bleach_n_points"
+        )
+    with bleach_st_cols[2]:
+        st.write("")
+        run_bleach = st.button("Run Simulation", type="primary", key="bleach_run")
+
+    st.divider()
+
+    if run_bleach:
+        t_eval_bleach = np.linspace(0, t_end_bleach, int(n_points_bleach))
+        params_bleach = {"kb": kb_bleach, "kd": kd_bleach, "alpha": alpha_bleach}
+
+        with st.spinner("Running simulation..."):
+            t_b, M_b, B_b, F_b = simulate_bleach(t_eval_bleach, params_bleach, M0=M0_bleach, B0=B0_bleach)
+
+        fig_b, ax_b = plt.subplots(figsize=(9, 5))
+        ax_b.plot(t_b, M_b, label="M (mature)")
+        ax_b.plot(t_b, B_b, label="B (bleached)")
+        ax_b.plot(t_b, F_b, "--", label="F = alpha * M (fluorescence)", linewidth=2)
+        ax_b.set_xlabel("Time (sec)")
+        ax_b.set_ylabel("Amount / Mean Intensity")
+        ax_b.set_title("Bleaching-only model (I(t) ~ 0)")
+        ax_b.legend()
+        fig_b.tight_layout()
+
+        st.pyplot(fig_b)
+    else:
+        st.info("Set your parameters above and click **Run Simulation**.")
 
 with sim_tab:
     st.markdown(
         "Simulate a 1-step or 2-step protein maturation model and view the "
         "resulting fluorescence curve. Adjust initial conditions and rate "
-        "constants in the sidebar, then click **Run Simulation**."
+        "constants below, then click **Run Simulation**. These values are "
+        "also used to generate synthetic data in the **Data** tab and as "
+        "the default rate constants in the **Bode Plot** tab."
     )
+
+    model_choice = st.radio(
+        "Maturation model",
+        options=["1-step (I -> M)", "2-step (I -> X -> M)"],
+        horizontal=True,
+    )
+    is_two_step = model_choice.startswith("2")
+
+    st.subheader("Initial conditions")
+    ic_cols = st.columns(4)
+    with ic_cols[0]:
+        I0 = st.number_input(
+            "I0 - immature protein at t=0", min_value=0.0, value=100.0, step=10.0,
+            help="Suggested: 100. Pool of just-translated protein present when translation is halted.",
+        )
+    X0 = 0.0
+    with ic_cols[1]:
+        if is_two_step:
+            X0 = st.number_input(
+                "X0 - intermediate protein at t=0", min_value=0.0, value=0.0, step=10.0,
+                help="Suggested: 0. Usually no protein has reached the intermediate stage yet.",
+            )
+    with ic_cols[2]:
+        M0 = st.number_input(
+            "M0 - mature (fluorescent) protein at t=0", min_value=0.0, value=0.0, step=10.0,
+            help="Suggested: 0. No protein has finished maturing at t=0.",
+        )
+    with ic_cols[3]:
+        B0 = st.number_input(
+            "B0 - bleached protein at t=0", min_value=0.0, value=0.0, step=10.0,
+            help="Suggested: 0. No photobleaching has occurred yet.",
+        )
+
+    st.subheader("Rate constants")
+    rc_cols = st.columns(6)
+    with rc_cols[0]:
+        if is_two_step:
+            k1 = st.number_input(
+                "k1 - rate I -> X", min_value=0.0, value=0.20, step=0.01, format="%.3f",
+                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.20.",
+            )
+        else:
+            km = st.number_input(
+                "km - rate I -> M", min_value=0.0, value=0.15, step=0.01, format="%.3f",
+                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.15.",
+            )
+    with rc_cols[1]:
+        if is_two_step:
+            k2 = st.number_input(
+                "k2 - rate X -> M", min_value=0.0, value=0.10, step=0.01, format="%.3f",
+                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.10.",
+            )
+    with rc_cols[2]:
+        kd = st.number_input(
+            "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
+            help="Suggested range: 0.001-0.05 /sec. Applies to all species. Illustrative default: 0.01.",
+        )
+    with rc_cols[3]:
+        kb = st.number_input(
+            "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.02, step=0.005, format="%.4f",
+            help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02.",
+        )
+    with rc_cols[4]:
+        u = st.number_input(
+            "u - production rate", min_value=0.0, value=0.0, step=0.1, format="%.3f",
+            help="Suggested: 0 if translation is blocked (e.g. chloramphenicol chase). "
+                 "Use a positive value to model ongoing translation.",
+        )
+    with rc_cols[5]:
+        alpha = st.number_input(
+            "alpha - fluorescence scaling factor", min_value=0.0, value=1.0, step=0.1,
+            help="Suggested: 1.0. Brightness per unit mature protein.",
+        )
+
+    st.subheader("Simulation time")
+    st_cols = st.columns(3)
+    with st_cols[0]:
+        t_end = st.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0)
+    with st_cols[1]:
+        n_points = st.number_input("Number of time points", min_value=10, value=300, step=10)
+    with st_cols[2]:
+        st.write("")
+        run = st.button("Run Simulation", type="primary")
+
+    st.divider()
 
     if run:
         t_eval = np.linspace(0, t_end, int(n_points))
@@ -318,7 +423,7 @@ with sim_tab:
 
         st.pyplot(fig)
     else:
-        st.info("Set your parameters in the sidebar and click **Run Simulation**.")
+        st.info("Set your parameters above and click **Run Simulation**.")
 
 with upload_tab:
     st.markdown(
@@ -373,7 +478,7 @@ with upload_tab:
     else:
         st.markdown(
             "Generates a synthetic fluorescence trace using the model and "
-            "rate constants currently set in the sidebar. Two independent "
+            "rate constants currently set in the **Simulation** tab. Two independent "
             "noise sources can be applied: Gaussian noise on the rate "
             "constant(s) themselves (drawn fresh at every simulated time "
             "step, before the model is integrated forward), and/or Gaussian "
@@ -851,7 +956,7 @@ with fit_tab:
                         st.caption(
                             "Multi-start initial guesses centered on: "
                             + (
-                                "synthetic input parameters (sidebar values used to generate this data)"
+                                "synthetic input parameters (Simulation tab values used to generate this data)"
                                 if use_synthetic_centers
                                 else "advanced initial guesses above (no matching synthetic ground truth available)"
                             )
@@ -1170,8 +1275,8 @@ with bode_tab:
         "frequency, and the cutoff frequency above which dynamics are lost to "
         "maturation/bleaching. Plots the synthetic-data ground truth (if "
         "generated) and the most recent least-squares fit (if run) for "
-        "comparison; the -3 dB cutoff metrics below still use the sidebar's "
-        "current rate constants."
+        "comparison; the -3 dB cutoff metrics below still use the "
+        "**Simulation** tab's current rate constants."
     )
 
     col_a, col_b, col_c = st.columns(3)
@@ -1292,7 +1397,7 @@ with ms_history_tab:
         "fitted results and the synthetic-data ground truth (if any) exactly "
         "as they were at the time it ran — click **Display** to view its "
         "histograms and summary statistics again, even after changing "
-        "sidebar parameters or running other fits since."
+        "Simulation tab parameters or running other fits since."
     )
 
     history = load_multi_start_history()
