@@ -69,6 +69,38 @@ def simulate_1step_noisy(t, params, I0, M0, B0, km_std=0.0, kb_std=0.0, seed=Non
     return t, I, M, B, F
 
 
+def simulate_bleach_noisy(t, params, M0, B0, kb_std=0.0, seed=None):
+    """Euler-integrate the bleaching-only model (M -> B, I(t) ~ 0) with Gaussian noise on kb.
+
+    params must contain: kb, kd, alpha.
+    Returns (t, M, B, F).
+    """
+    rng = np.random.default_rng(seed)
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+
+    M = np.empty(n)
+    B = np.empty(n)
+    M[0], B[0] = M0, B0
+
+    kb = params["kb"]
+    kd = params["kd"]
+    alpha = params["alpha"]
+
+    for i in range(1, n):
+        dt = t[i] - t[i - 1]
+        kb_i = _noisy_rate(kb, kb_std, rng)
+
+        dMdt = -kb_i * M[i - 1] - kd * M[i - 1]
+        dBdt = kb_i * M[i - 1] - kd * B[i - 1]
+
+        M[i] = M[i - 1] + dt * dMdt
+        B[i] = B[i - 1] + dt * dBdt
+
+    F = alpha * M
+    return t, M, B, F
+
+
 def simulate_2step_noisy(t, params, I0, X0, M0, B0, k1_std=0.0, k2_std=0.0, kb_std=0.0, seed=None):
     """Euler-integrate the 2-step model (I -> X -> M -> B) with Gaussian noise on k1, k2, and kb.
 

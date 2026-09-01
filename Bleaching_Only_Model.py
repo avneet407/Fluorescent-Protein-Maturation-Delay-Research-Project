@@ -40,3 +40,14 @@ def analytical_F(t, A, kb, kd):
     """Closed-form F(t) = A * exp(-b*t), A = alpha * M0, b = kb + kd."""
     b = kb + kd
     return A * np.exp(-b * t)
+
+
+# ---------------------------------------------------------
+# Residual function for least-squares fitting
+# ---------------------------------------------------------
+
+def residuals_bleach(x, t, F_meas):
+    M0, kb, kd, alpha = x
+    params = {"kb": kb, "kd": kd, "alpha": alpha}
+    _, M, B, F = simulate_bleach(t, params, M0=M0, B0=0.0)
+    return F - F_meas

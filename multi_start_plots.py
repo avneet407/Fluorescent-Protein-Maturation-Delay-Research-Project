@@ -37,6 +37,7 @@ def plot_histograms(df, names, true_values, color="tab:blue", figsize_per_panel=
             )
             ax.legend(fontsize=7)
         ax.set_xlim(hist_range)
+        ax.ticklabel_format(axis="x", useOffset=False, style="plain")
         ax.set_title(name)
         ax.set_xlabel(name)
         ax.set_ylabel("Count")

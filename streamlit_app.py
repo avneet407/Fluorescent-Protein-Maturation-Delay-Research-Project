@@ -19,6 +19,11 @@ from Maturation_Models import (
 from Bleaching_Only_Model import (
     model_bleach,
     simulate_bleach,
+    residuals_bleach,
+)
+from Maturation_Model_Known_Bleaching_Pole import (
+    residuals_1step_known_b,
+    residuals_2step_known_b,
 )
 from bode_plot import (
     bode_1step,
@@ -30,6 +35,7 @@ from bode_plot import (
 from gaussian_noise import (
     simulate_1step_noisy,
     simulate_2step_noisy,
+    simulate_bleach_noisy,
     add_measurement_noise,
 )
 from multi_start_fit import run_multi_start
@@ -200,92 +206,13 @@ def render_profile_2d_result(profile_df):
 st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
 st.title("Fluorescent Protein Maturation Delay Model")
 
-bleach_tab, sim_tab, upload_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab = st.tabs(
+sim_tab, upload_tab, bleach_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab = st.tabs(
     [
-        "Bleaching Only Simulation", "Simulation", "Data", "Least Squares Fitting", "Profile Likelihood",
-        "Bode Plot", "Multi-Start History", "Profile Likelihood History",
+        "Simulation", "Data", "Bleaching Only Simulation",
+        "Least Squares Fitting", "Profile Likelihood", "Bode Plot", "Multi-Start History",
+        "Profile Likelihood History",
     ]
 )
-
-with bleach_tab:
-    st.markdown(
-        "Models cells whose FP is already fully matured when imaging starts, "
-        "so I(t) ~ 0 throughout and no new mature protein is produced. The "
-        "mature pool only decays, via photobleaching and dilution:\n\n"
-        "dM/dt = -kb*M - kd*M = -b*M,  b = kb + kd\n\n"
-        "with M(0) = M0. This has the closed form M(t) = M0 * exp(-b*t), "
-        "so F(t) = alpha*M(t) = A*exp(-b*t) with lumped amplitude A = alpha*M0. "
-        "Adjust the initial condition and rate constants below, then click "
-        "**Run Simulation**."
-    )
-
-    bleach_ic_cols = st.columns(4)
-    with bleach_ic_cols[0]:
-        M0_bleach = st.number_input(
-            "M0 - mature (fluorescent) protein at t=0", min_value=0.0, value=100.0, step=10.0,
-            help="Suggested: 100. Fluorescence already present in the cell when imaging starts.",
-            key="bleach_M0",
-        )
-    with bleach_ic_cols[1]:
-        B0_bleach = st.number_input(
-            "B0 - bleached protein at t=0", min_value=0.0, value=0.0, step=10.0,
-            help="Suggested: 0. No photobleaching has occurred yet.",
-            key="bleach_B0",
-        )
-
-    bleach_rc_cols = st.columns(4)
-    with bleach_rc_cols[0]:
-        kb_bleach = st.number_input(
-            "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.02, step=0.005, format="%.4f",
-            help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02.",
-            key="bleach_kb",
-        )
-    with bleach_rc_cols[1]:
-        kd_bleach = st.number_input(
-            "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
-            help="Suggested range: 0.001-0.05 /sec. Illustrative default: 0.01.",
-            key="bleach_kd",
-        )
-    with bleach_rc_cols[2]:
-        alpha_bleach = st.number_input(
-            "alpha - fluorescence scaling factor", min_value=0.0, value=1.0, step=0.1,
-            help="Suggested: 1.0. Brightness per unit mature protein.",
-            key="bleach_alpha",
-        )
-
-    bleach_st_cols = st.columns(3)
-    with bleach_st_cols[0]:
-        t_end_bleach = st.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0, key="bleach_t_end")
-    with bleach_st_cols[1]:
-        n_points_bleach = st.number_input(
-            "Number of time points", min_value=10, value=300, step=10, key="bleach_n_points"
-        )
-    with bleach_st_cols[2]:
-        st.write("")
-        run_bleach = st.button("Run Simulation", type="primary", key="bleach_run")
-
-    st.divider()
-
-    if run_bleach:
-        t_eval_bleach = np.linspace(0, t_end_bleach, int(n_points_bleach))
-        params_bleach = {"kb": kb_bleach, "kd": kd_bleach, "alpha": alpha_bleach}
-
-        with st.spinner("Running simulation..."):
-            t_b, M_b, B_b, F_b = simulate_bleach(t_eval_bleach, params_bleach, M0=M0_bleach, B0=B0_bleach)
-
-        fig_b, ax_b = plt.subplots(figsize=(9, 5))
-        ax_b.plot(t_b, M_b, label="M (mature)")
-        ax_b.plot(t_b, B_b, label="B (bleached)")
-        ax_b.plot(t_b, F_b, "--", label="F = alpha * M (fluorescence)", linewidth=2)
-        ax_b.set_xlabel("Time (sec)")
-        ax_b.set_ylabel("Amount / Mean Intensity")
-        ax_b.set_title("Bleaching-only model (I(t) ~ 0)")
-        ax_b.legend()
-        fig_b.tight_layout()
-
-        st.pyplot(fig_b)
-    else:
-        st.info("Set your parameters above and click **Run Simulation**.")
 
 with sim_tab:
     st.markdown(
@@ -369,6 +296,30 @@ with sim_tab:
             help="Suggested: 1.0. Brightness per unit mature protein.",
         )
 
+    st.subheader("Derived parameters")
+    if is_two_step:
+        a_val = k1 + kd
+        c_val = k2 + kd
+        b_val = kb + kd
+        G3_val = alpha * k1 * k2
+        G3I0_val = G3_val * I0
+        dp_cols = st.columns(5)
+        dp_cols[0].metric("a = k1 + kd", f"{a_val:.4f}")
+        dp_cols[1].metric("c = k2 + kd", f"{c_val:.4f}")
+        dp_cols[2].metric("b = kb + kd", f"{b_val:.4f}")
+        dp_cols[3].metric("G3 = alpha * k1 * k2", f"{G3_val:.4f}")
+        dp_cols[4].metric("G3 * I0", f"{G3I0_val:.4f}")
+    else:
+        a_val = km + kd
+        b_val = kb + kd
+        G_val = alpha * km
+        GI0_val = G_val * I0
+        dp_cols = st.columns(4)
+        dp_cols[0].metric("a = km + kd", f"{a_val:.4f}")
+        dp_cols[1].metric("b = kb + kd", f"{b_val:.4f}")
+        dp_cols[2].metric("G = alpha * km", f"{G_val:.4f}")
+        dp_cols[3].metric("G * I0", f"{GI0_val:.4f}")
+
     st.subheader("Simulation time")
     st_cols = st.columns(3)
     with st_cols[0]:
@@ -382,9 +333,11 @@ with sim_tab:
     st.divider()
 
     if run:
-        t_eval = np.linspace(0, t_end, int(n_points))
+        st.session_state["sim_kb"] = kb
+        st.session_state["sim_kd"] = kd
+        st.session_state["sim_run_version"] = st.session_state.get("sim_run_version", 0) + 1
 
-        fig, ax = plt.subplots(figsize=(9, 5))
+        t_eval = np.linspace(0, t_end, int(n_points))
 
         if is_two_step:
             params = {"u": u, "k1": k1, "k2": k2, "kb": kb, "kd": kd}
@@ -392,28 +345,44 @@ with sim_tab:
             with st.spinner("Running simulation..."):
                 sol = solve_ivp(model_2step, (t_eval[0], t_eval[-1]), y0,
                                  t_eval=t_eval, args=(params,), method="RK45")
-            I, X, M, B = sol.y
-            F = alpha * M
-
-            ax.plot(sol.t, I, label="I (immature)")
-            ax.plot(sol.t, X, label="X (intermediate)")
-            ax.plot(sol.t, M, label="M (mature)")
-            ax.plot(sol.t, B, label="B (bleached)")
-            ax.plot(sol.t, F, "--", label="F = alpha * M (fluorescence)", linewidth=2)
-            ax.set_title("2-step maturation model")
+            I_sim, X_sim, M_sim, B_sim = sol.y
+            F_sim = alpha * M_sim
+            st.session_state["sim_result"] = {
+                "is_two_step": True,
+                "t": sol.t, "I": I_sim, "X": X_sim, "M": M_sim, "B": B_sim, "F": F_sim,
+            }
         else:
             params = {"u": u, "km": km, "kb": kb, "kd": kd}
             y0 = [I0, M0, B0]
             with st.spinner("Running simulation..."):
                 sol = solve_ivp(model_1step, (t_eval[0], t_eval[-1]), y0,
                                  t_eval=t_eval, args=(params,), method="RK45")
-            I, M, B = sol.y
-            F = alpha * M
+            I_sim, M_sim, B_sim = sol.y
+            F_sim = alpha * M_sim
+            st.session_state["sim_result"] = {
+                "is_two_step": False,
+                "t": sol.t, "I": I_sim, "M": M_sim, "B": B_sim, "F": F_sim,
+            }
 
-            ax.plot(sol.t, I, label="I (immature)")
-            ax.plot(sol.t, M, label="M (mature)")
-            ax.plot(sol.t, B, label="B (bleached)")
-            ax.plot(sol.t, F, "--", label="F = alpha * M (fluorescence)", linewidth=2)
+    sim_result = st.session_state.get("sim_result")
+
+    if sim_result is None:
+        st.info("Set your parameters above and click **Run Simulation**.")
+    else:
+        fig, ax = plt.subplots(figsize=(9, 5))
+
+        if sim_result["is_two_step"]:
+            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)")
+            ax.plot(sim_result["t"], sim_result["X"], label="X (intermediate)")
+            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)")
+            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)")
+            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)", linewidth=2)
+            ax.set_title("2-step maturation model")
+        else:
+            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)")
+            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)")
+            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)")
+            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)", linewidth=2)
             ax.set_title("1-step maturation model")
 
         ax.set_xlabel("Time (sec)")
@@ -422,8 +391,6 @@ with sim_tab:
         fig.tight_layout()
 
         st.pyplot(fig)
-    else:
-        st.info("Set your parameters above and click **Run Simulation**.")
 
 with upload_tab:
     st.markdown(
@@ -608,6 +575,468 @@ with upload_tab:
     st.session_state["current_data_source"] = data_source
     st.session_state["current_dataset_key"] = dataset_key
 
+with bleach_tab:
+    st.markdown(
+        "Models cells whose FP is already fully matured when imaging starts, "
+        "so I(t) ~ 0 throughout and no new mature protein is produced. The "
+        "mature pool only decays, via photobleaching and dilution:\n\n"
+        "dM/dt = -kb*M - kd*M = -b*M,  b = kb + kd\n\n"
+        "with M(0) = M0. This has the closed form M(t) = M0 * exp(-b*t), "
+        "so F(t) = alpha*M(t) = A*exp(-b*t) with lumped amplitude A = alpha*M0. "
+        "Adjust the initial condition and rate constants below, then click "
+        "**Run Simulation**."
+    )
+
+    bleach_ic_cols = st.columns(4)
+    with bleach_ic_cols[0]:
+        M0_bleach = st.number_input(
+            "M0 - mature (fluorescent) protein at t=0", min_value=0.0, value=100.0, step=10.0,
+            help="Suggested: 100. Fluorescence already present in the cell when imaging starts.",
+            key="bleach_M0",
+        )
+    with bleach_ic_cols[1]:
+        B0_bleach = st.number_input(
+            "B0 - bleached protein at t=0", min_value=0.0, value=0.0, step=10.0,
+            help="Suggested: 0. No photobleaching has occurred yet.",
+            key="bleach_B0",
+        )
+
+    st.session_state.setdefault("bleach_kb", 0.02)
+    st.session_state.setdefault("bleach_kd", 0.01)
+
+    sim_run_version = st.session_state.get("sim_run_version")
+    if sim_run_version is not None and st.session_state.get("bleach_synced_version") != sim_run_version:
+        st.session_state["bleach_kb"] = st.session_state["sim_kb"]
+        st.session_state["bleach_kd"] = st.session_state["sim_kd"]
+        st.session_state["bleach_synced_version"] = sim_run_version
+
+    if sim_run_version is not None:
+        st.caption(
+            "kb and kd below are synced from the last **Run Simulation** in "
+            "the **Simulation** tab (kb="
+            f"{st.session_state['sim_kb']:.4f}, kd={st.session_state['sim_kd']:.4f}"
+            "); edit them here to override."
+        )
+
+    bleach_rc_cols = st.columns(4)
+    with bleach_rc_cols[0]:
+        kb_bleach = st.number_input(
+            "kb - photobleaching rate (M -> B)", min_value=0.0, step=0.005, format="%.4f",
+            help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02. Synced from the "
+                 "Simulation tab's kb after a run, but can be overridden here.",
+            key="bleach_kb",
+        )
+    with bleach_rc_cols[1]:
+        kd_bleach = st.number_input(
+            "kd - degradation / dilution rate", min_value=0.0, step=0.005, format="%.4f",
+            help="Suggested range: 0.001-0.05 /sec. Illustrative default: 0.01. Synced from the "
+                 "Simulation tab's kd after a run, but can be overridden here.",
+            key="bleach_kd",
+        )
+    with bleach_rc_cols[2]:
+        alpha_bleach = st.number_input(
+            "alpha - fluorescence scaling factor", min_value=0.0, value=1.0, step=0.1,
+            help="Suggested: 1.0. Brightness per unit mature protein.",
+            key="bleach_alpha",
+        )
+
+    st.subheader("Derived parameters")
+    b_val_bleach = kb_bleach + kd_bleach
+    A_val_bleach = alpha_bleach * M0_bleach
+    dp_cols_bleach = st.columns(2)
+    dp_cols_bleach[0].metric("b = kb + kd", f"{b_val_bleach:.4f}")
+    dp_cols_bleach[1].metric("A = alpha * M0", f"{A_val_bleach:.4f}")
+
+    bleach_st_cols = st.columns(3)
+    with bleach_st_cols[0]:
+        t_end_bleach = st.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0, key="bleach_t_end")
+    with bleach_st_cols[1]:
+        n_points_bleach = st.number_input(
+            "Number of time points", min_value=10, value=300, step=10, key="bleach_n_points"
+        )
+    with bleach_st_cols[2]:
+        st.write("")
+        run_bleach = st.button("Run Simulation", type="primary", key="bleach_run")
+
+    st.divider()
+
+    if run_bleach:
+        t_eval_bleach = np.linspace(0, t_end_bleach, int(n_points_bleach))
+        params_bleach = {"kb": kb_bleach, "kd": kd_bleach, "alpha": alpha_bleach}
+
+        with st.spinner("Running simulation..."):
+            t_b, M_b, B_b, F_b = simulate_bleach(t_eval_bleach, params_bleach, M0=M0_bleach, B0=B0_bleach)
+
+        st.session_state["bleach_sim"] = {
+            "t": t_b, "M": M_b, "B": B_b, "F": F_b,
+            "M0": M0_bleach, "B0": B0_bleach,
+            "kb": kb_bleach, "kd": kd_bleach, "alpha": alpha_bleach,
+        }
+
+    bleach_sim = st.session_state.get("bleach_sim")
+
+    if bleach_sim is None:
+        st.info("Set your parameters above and click **Run Simulation**.")
+    else:
+        fig_b, ax_b = plt.subplots(figsize=(9, 5))
+        ax_b.plot(bleach_sim["t"], bleach_sim["M"], label="M (mature)")
+        ax_b.plot(bleach_sim["t"], bleach_sim["B"], label="B (bleached)")
+        ax_b.plot(bleach_sim["t"], bleach_sim["F"], "--", label="F = alpha * M (fluorescence)", linewidth=2)
+        ax_b.set_xlabel("Time (sec)")
+        ax_b.set_ylabel("Amount / Mean Intensity")
+        ax_b.set_title("Bleaching-only model (I(t) ~ 0)")
+        ax_b.legend()
+        fig_b.tight_layout()
+
+        st.pyplot(fig_b)
+
+        st.divider()
+        st.subheader("Generate synthetic data")
+        st.markdown(
+            "Generates a synthetic fluorescence trace using the model and "
+            "rate constants set above. Two independent noise sources can be "
+            "applied: Gaussian noise on kb (drawn fresh at every simulated "
+            "time step, before the model is integrated forward), and/or "
+            "Gaussian measurement noise added directly to the resulting Mean "
+            "intensity trace (e.g. camera/shot noise). The resulting trace "
+            "is then used as the data to fit against below."
+        )
+
+        bleach_noise_cols = st.columns(2)
+        with bleach_noise_cols[0]:
+            kb_noise_std_bleach = st.number_input(
+                "kb noise std dev", min_value=0.0, value=0.005, step=0.001, format="%.4f",
+                help="Standard deviation of the Gaussian noise added to kb at each time step.",
+                key="bleach_kb_noise_std",
+            )
+        with bleach_noise_cols[1]:
+            measurement_noise_std_bleach = st.number_input(
+                "Measurement noise std dev (Mean intensity)",
+                min_value=0.0, value=0.0, step=0.5,
+                help="Standard deviation of independent Gaussian noise added directly "
+                     "to the simulated Mean intensity trace, on top of any kb noise above.",
+                key="bleach_measurement_noise_std",
+            )
+
+        use_seed_bleach = st.checkbox(
+            "Fix random seed (reproducible noise)", value=False, key="bleach_use_seed"
+        )
+        seed_bleach = None
+        measurement_seed_bleach = None
+        if use_seed_bleach:
+            seed_bleach = int(st.number_input(
+                "Random seed", min_value=0, value=0, step=1, key="bleach_seed_val"
+            ))
+            measurement_seed_bleach = seed_bleach + 1
+
+        generate_button_bleach = st.button(
+            "Generate Synthetic Data", type="primary", key="bleach_generate_data"
+        )
+
+        if generate_button_bleach:
+            with st.spinner("Generating synthetic data..."):
+                params_syn_bleach = {"kb": kb_bleach, "kd": kd_bleach, "alpha": alpha_bleach}
+                t_syn_bleach, _, _, F_syn_bleach = simulate_bleach_noisy(
+                    bleach_sim["t"], params_syn_bleach, M0=M0_bleach, B0=B0_bleach,
+                    kb_std=kb_noise_std_bleach, seed=seed_bleach,
+                )
+                F_syn_bleach = add_measurement_noise(
+                    F_syn_bleach, measurement_noise_std_bleach, seed=measurement_seed_bleach
+                )
+
+            st.session_state["bleach_synthetic_data"] = {"t": t_syn_bleach, "F": F_syn_bleach}
+            st.session_state["bleach_synthetic_params"] = {
+                "M0": M0_bleach, "kb": kb_bleach, "kd": kd_bleach, "alpha": alpha_bleach,
+            }
+            st.session_state["bleach_noise_params"] = {
+                "kb_noise_std": kb_noise_std_bleach,
+                "measurement_noise_std": measurement_noise_std_bleach,
+                "seed": seed_bleach,
+                "measurement_seed": measurement_seed_bleach,
+            }
+
+        bleach_synth = st.session_state.get("bleach_synthetic_data")
+        bleach_synth_params = st.session_state.get("bleach_synthetic_params")
+
+        if bleach_synth is None:
+            st.info("Click **Generate Synthetic Data** to create a synthetic trace.")
+        else:
+            fig_syn_b, ax_syn_b = plt.subplots(figsize=(9, 5))
+            ax_syn_b.plot(bleach_synth["t"], bleach_synth["F"], marker="o", markersize=3)
+            ax_syn_b.set_xlabel("Time (sec)")
+            ax_syn_b.set_ylabel("Mean intensity")
+            ax_syn_b.set_title("Synthetic data")
+            fig_syn_b.tight_layout()
+            st.pyplot(fig_syn_b)
+
+        st.divider()
+        st.subheader("Multi-start least-squares fit")
+
+        if bleach_synth is None:
+            st.info("Generate synthetic data above to fit against.")
+        else:
+            st.markdown(
+                "Repeats a least-squares fit of M0, kb, kd, and alpha to the "
+                "synthetic data above from many independently randomized "
+                "initial guesses, log-uniform over one decade centered on the "
+                "synthetic input parameters, to check convergence robustness "
+                "and parameter identifiability. Note that kb and kd trade off "
+                "against each other since only b = kb + kd is identifiable "
+                "from F(t) alone, and similarly alpha and M0 only enter as "
+                "A = alpha * M0."
+            )
+
+            fit_col1_bleach, fit_col2_bleach = st.columns(2)
+            with fit_col1_bleach:
+                n_multi_runs_bleach = st.number_input(
+                    "Number of runs (N)", min_value=2, value=30, step=1, key="bleach_n_multi_runs",
+                )
+            with fit_col2_bleach:
+                include_nonconverged_bleach = st.checkbox(
+                    "Include non-converged runs in plots/stats", value=False,
+                    key="bleach_include_nonconverged",
+                )
+            multi_seed_fix_bleach = st.checkbox(
+                "Fix random seed for initial guesses", value=False, key="bleach_multi_seed_fix",
+            )
+            multi_seed_bleach = None
+            if multi_seed_fix_bleach:
+                multi_seed_bleach = int(st.number_input(
+                    "Initial-guess random seed", min_value=0, value=0, step=1, key="bleach_multi_seed_val",
+                ))
+
+            multi_fit_button_bleach = st.button("Run Multi-Start Fit (N runs)", key="bleach_multi_fit_button")
+
+            if multi_fit_button_bleach:
+                param_names_bleach = ["M0", "kb", "kd", "alpha"]
+                centers_bleach = [
+                    bleach_synth_params["M0"], bleach_synth_params["kb"],
+                    bleach_synth_params["kd"], bleach_synth_params["alpha"],
+                ]
+                bounds_bleach = ([0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 10.0])
+
+                with st.spinner(f"Running multi-start fit ({int(n_multi_runs_bleach)} runs)..."):
+                    results_df_bleach = run_multi_start(
+                        residuals_bleach, param_names_bleach, centers_bleach, bounds_bleach,
+                        args=(bleach_synth["t"], bleach_synth["F"]), n_runs=int(n_multi_runs_bleach),
+                        seed=multi_seed_bleach,
+                    )
+
+                results_df_bleach["b"] = results_df_bleach["kb"] + results_df_bleach["kd"]
+                results_df_bleach["A"] = results_df_bleach["alpha"] * results_df_bleach["M0"]
+                derived_names_bleach = ["b", "A"]
+
+                true_values_bleach = {
+                    "M0": bleach_synth_params["M0"],
+                    "kb": bleach_synth_params["kb"],
+                    "kd": bleach_synth_params["kd"],
+                    "alpha": bleach_synth_params["alpha"],
+                    "b": bleach_synth_params["kb"] + bleach_synth_params["kd"],
+                    "A": bleach_synth_params["alpha"] * bleach_synth_params["M0"],
+                }
+
+                st.session_state["bleach_multi_result"] = {
+                    "results_df": results_df_bleach,
+                    "param_names": param_names_bleach,
+                    "derived_names": derived_names_bleach,
+                    "true_values": true_values_bleach,
+                }
+
+            bleach_multi_result = st.session_state.get("bleach_multi_result")
+            if bleach_multi_result is None:
+                st.info("Click **Run Multi-Start Fit (N runs)** to fit against the synthetic data above.")
+            else:
+                st.caption(
+                    "Multi-start initial guesses centered on: synthetic input "
+                    "parameters (log-uniform, 1 decade span)"
+                )
+                render_multi_start_results(
+                    bleach_multi_result["results_df"], bleach_multi_result["param_names"],
+                    bleach_multi_result["derived_names"], bleach_multi_result["true_values"],
+                    include_nonconverged_bleach,
+                )
+
+    st.divider()
+    st.subheader("Known bleaching pole fit (full maturation model)")
+    st.markdown(
+        "Fits the full maturation model to the synthetic fluorescence trace "
+        "generated in the **Data** tab, treating b = kb + kd as fixed and "
+        "known (e.g. estimated above from the bleaching-only multi-start "
+        "fit) rather than estimated. Multi-start initial guesses are still "
+        "centered on the synthetic input parameters (log-uniform, one "
+        "decade span); since several of the raw fitted parameters (I0, "
+        "km/k1/k2, kd, alpha) are not individually identifiable on their "
+        "own, only the identifiable derived quantities are reported below, "
+        "compared to their synthetic input values."
+    )
+
+    data_kb = st.session_state.get("current_data")
+    data_source_kb = st.session_state.get("current_data_source")
+    synthetic_params_kb = st.session_state.get("synthetic_params")
+
+    if (
+        data_kb is None
+        or data_source_kb != "Generate synthetic data from simulation"
+        or synthetic_params_kb is None
+    ):
+        st.info(
+            "This fit requires synthetic data. In the **Data** tab, select "
+            "'Generate synthetic data from simulation' and click "
+            "**Generate Synthetic Data** first."
+        )
+    else:
+        fit_is_two_step_kb = synthetic_params_kb["is_two_step"]
+        st.caption(
+            "Using synthetic data generated from the "
+            + ("2-step (I -> X -> M)" if fit_is_two_step_kb else "1-step (I -> M)")
+            + " model (set in the Simulation tab)."
+        )
+
+        time_all_kb = data_kb["Time"].to_numpy(dtype=float)
+        F_meas_kb = data_kb["Mean"].to_numpy(dtype=float)
+        t_fit_kb = time_all_kb - time_all_kb[0]
+
+        u_step_kb = st.number_input(
+            "u - production rate (fixed during fit)",
+            min_value=0.0, value=0.0, step=0.1, key="known_b_u_step",
+            help="Suggested: match the Simulation tab's u (0 if translation was blocked).",
+        )
+
+        true_b_kb = synthetic_params_kb["kb"] + synthetic_params_kb["kd"]
+        b_known = st.number_input(
+            "b = kb + kd (known, fixed during fit)",
+            min_value=0.0, value=float(true_b_kb), step=0.005, format="%.4f",
+            key="known_b_value",
+            help="Suggested: the b value estimated from the multi-start fit "
+                 "above. Defaults to this synthetic dataset's true b for "
+                 "validation.",
+        )
+
+        multi_col1_kb, multi_col2_kb = st.columns(2)
+        with multi_col1_kb:
+            n_multi_runs_kb = st.number_input(
+                "Number of runs (N)", min_value=2, value=30, step=1, key="known_b_n_multi_runs",
+            )
+        with multi_col2_kb:
+            include_nonconverged_kb = st.checkbox(
+                "Include non-converged runs in plots/stats", value=False,
+                key="known_b_include_nonconverged",
+            )
+        multi_seed_fix_kb = st.checkbox(
+            "Fix random seed for initial guesses", value=False, key="known_b_multi_seed_fix",
+        )
+        multi_seed_kb = None
+        if multi_seed_fix_kb:
+            multi_seed_kb = int(st.number_input(
+                "Initial-guess random seed", min_value=0, value=0, step=1, key="known_b_multi_seed_val",
+            ))
+
+        multi_fit_button_kb = st.button("Run Multi-Start Fit (N runs)", key="known_b_multi_fit_button")
+
+        if multi_fit_button_kb:
+            fixed_kb = {"u": u_step_kb, "b": b_known}
+
+            if fit_is_two_step_kb:
+                centers_kb = [
+                    synthetic_params_kb["I0"], synthetic_params_kb["k1"],
+                    synthetic_params_kb["k2"], synthetic_params_kb["kd"], synthetic_params_kb["alpha"],
+                ]
+                param_names_kb = ["I0", "k1", "k2", "kd", "alpha"]
+                bounds_kb = ([0.0, 0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 5.0, 10.0])
+                residual_fn_kb = residuals_2step_known_b
+            else:
+                centers_kb = [
+                    synthetic_params_kb["I0"], synthetic_params_kb["km"],
+                    synthetic_params_kb["kd"], synthetic_params_kb["alpha"],
+                ]
+                param_names_kb = ["I0", "km", "kd", "alpha"]
+                bounds_kb = ([0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 10.0])
+                residual_fn_kb = residuals_1step_known_b
+
+            with st.spinner(f"Running multi-start fit ({int(n_multi_runs_kb)} runs)..."):
+                results_df_kb = run_multi_start(
+                    residual_fn_kb, param_names_kb, centers_kb, bounds_kb,
+                    args=(t_fit_kb, F_meas_kb, fixed_kb), n_runs=int(n_multi_runs_kb),
+                    seed=multi_seed_kb,
+                )
+
+            if fit_is_two_step_kb:
+                results_df_kb["a"] = results_df_kb["k1"] + results_df_kb["kd"]
+                results_df_kb["G3"] = results_df_kb["alpha"] * results_df_kb["k1"] * results_df_kb["k2"]
+                results_df_kb["G3*I0"] = results_df_kb["G3"] * results_df_kb["I0"]
+                derived_names_kb = ["a", "G3", "G3*I0"]
+            else:
+                results_df_kb["a"] = results_df_kb["km"] + results_df_kb["kd"]
+                results_df_kb["G"] = results_df_kb["alpha"] * results_df_kb["km"]
+                results_df_kb["G*I0"] = results_df_kb["G"] * results_df_kb["I0"]
+                derived_names_kb = ["a", "G", "G*I0"]
+
+            true_values_kb = {}
+            if fit_is_two_step_kb:
+                true_values_kb["a"] = synthetic_params_kb["k1"] + synthetic_params_kb["kd"]
+                true_values_kb["G3"] = (
+                    synthetic_params_kb["alpha"] * synthetic_params_kb["k1"] * synthetic_params_kb["k2"]
+                )
+                true_values_kb["G3*I0"] = true_values_kb["G3"] * synthetic_params_kb["I0"]
+            else:
+                true_values_kb["a"] = synthetic_params_kb["km"] + synthetic_params_kb["kd"]
+                true_values_kb["G"] = synthetic_params_kb["alpha"] * synthetic_params_kb["km"]
+                true_values_kb["G*I0"] = true_values_kb["G"] * synthetic_params_kb["I0"]
+
+            st.session_state["known_b_multi_result"] = {
+                "results_df": results_df_kb,
+                "derived_names": derived_names_kb,
+                "true_values": true_values_kb,
+            }
+
+        known_b_multi_result = st.session_state.get("known_b_multi_result")
+        if known_b_multi_result is None:
+            st.info("Click **Run Multi-Start Fit (N runs)** to fit against the synthetic data.")
+        else:
+            st.caption(
+                "Multi-start initial guesses centered on: synthetic input "
+                "parameters (Simulation tab values used to generate this "
+                "data); b is fixed at the value entered above, not estimated."
+            )
+
+            results_df_kb = known_b_multi_result["results_df"]
+            derived_names_kb = known_b_multi_result["derived_names"]
+            true_values_kb = known_b_multi_result["true_values"]
+
+            n_converged_kb = int(results_df_kb["converged"].sum())
+            st.markdown(
+                f"**Multi-start fit complete: {n_converged_kb} / {len(results_df_kb)} runs converged**"
+            )
+
+            plot_df_kb = results_df_kb if include_nonconverged_kb else results_df_kb[results_df_kb["converged"]]
+
+            if len(plot_df_kb) == 0:
+                st.warning(
+                    "No runs to display (no converged runs, and non-converged "
+                    "runs are excluded)."
+                )
+            else:
+                st.markdown("**Derived quantities across runs**")
+                fig_kb = plot_histograms(plot_df_kb, derived_names_kb, true_values_kb, color="tab:purple")
+                st.pyplot(fig_kb)
+
+                st.markdown("**Synthetic input vs. fitted derived quantities**")
+                summary_rows_kb = []
+                for name in derived_names_kb:
+                    vals = plot_df_kb[name].to_numpy(dtype=float)
+                    mean = float(np.mean(vals))
+                    std = float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0
+                    cv = std / mean if mean != 0 else float("nan")
+                    summary_rows_kb.append({
+                        "Quantity": name,
+                        "Synthetic input": true_values_kb[name],
+                        "Fitted (mean across runs)": mean,
+                        "Std dev": std,
+                        "CV": cv,
+                    })
+                summary_df_kb = pd.DataFrame(summary_rows_kb)
+                st.table(summary_df_kb.set_index("Quantity"))
+
 with fit_tab:
     data = st.session_state.get("current_data")
     data_label = st.session_state.get("current_data_label", "")
@@ -752,10 +1181,6 @@ with fit_tab:
                     if fit_button:
                         fixed = {"u": u_step}
 
-                        fig3, ax3 = plt.subplots(figsize=(10, 6))
-                        ax3.plot(t_raw, F_raw, "k--", linewidth=1.5, label="Raw selected data")
-                        ax3.plot(t_raw, F_meas, "o", markersize=4, label="Baseline-corrected data")
-
                         if fit_is_two_step:
                             x0 = np.array([I0_guess, k1_guess, k2_guess, kb_guess, kd_guess, alpha_guess])
                             bounds = ([0.0, 0.0, 0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 5.0, 5.0, 10.0])
@@ -788,18 +1213,12 @@ with fit_tab:
                             _, I_fit, X_fit, M_fit, B_fit, F_fit = simulate_2step(
                                 t_fit, fitted_params, I0=I0_hat, X0=0.0, M0=0.0, B0=0.0
                             )
-
-                            st.success("Fit complete (2-step model)")
-                            res_col1, res_col2, res_col3 = st.columns(3)
-                            res_col1.metric("I0", f"{I0_hat:.4f}")
-                            res_col1.metric("k1", f"{k1_hat:.4f}")
-                            res_col2.metric("k2", f"{k2_hat:.4f}")
-                            res_col2.metric("kb", f"{kb_hat:.4f}")
-                            res_col3.metric("kd", f"{kd_hat:.4f}")
-                            res_col3.metric("alpha", f"{alpha_hat:.4f}")
-
-                            ax3.plot(t_raw, F_fit, "-", linewidth=2, label="2-step model fit")
-                            ax3.set_title("2-step fit on selected time region")
+                            fit_title = "2-step fit on selected time region"
+                            metrics_cols = {
+                                "col1": [("I0", I0_hat), ("k1", k1_hat)],
+                                "col2": [("k2", k2_hat), ("kb", kb_hat)],
+                                "col3": [("kd", kd_hat), ("alpha", alpha_hat)],
+                            }
                         else:
                             x0 = np.array([I0_guess, km_guess, kb_guess, kd_guess, alpha_guess])
                             bounds = ([0.0, 0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 5.0, 10.0])
@@ -832,19 +1251,12 @@ with fit_tab:
                             _, I_fit, M_fit, B_fit, F_fit = simulate_1step(
                                 t_fit, fitted_params, I0=I0_hat, M0=0.0, B0=0.0
                             )
-
-                            st.success("Fit complete (1-step model)")
-                            res_col1, res_col2, res_col3 = st.columns(3)
-                            res_col1.metric("I0", f"{I0_hat:.4f}")
-                            res_col1.metric("km", f"{km_hat:.4f}")
-                            res_col2.metric("kb", f"{kb_hat:.4f}")
-                            res_col2.metric("kd", f"{kd_hat:.4f}")
-                            res_col3.metric("alpha", f"{alpha_hat:.4f}")
-
-                            ax3.plot(t_raw, F_fit, "-", linewidth=2, label="1-step model fit")
-                            ax3.set_title("1-step fit on selected time region")
-
-                        st.caption(f"Baseline subtracted = {baseline:.4f}")
+                            fit_title = "1-step fit on selected time region"
+                            metrics_cols = {
+                                "col1": [("I0", I0_hat), ("km", km_hat)],
+                                "col2": [("kb", kb_hat), ("kd", kd_hat)],
+                                "col3": [("alpha", alpha_hat)],
+                            }
 
                         residuals = fit.fun
                         sse = float(np.sum(residuals ** 2))
@@ -852,20 +1264,7 @@ with fit_tab:
                         ss_tot = float(np.sum((F_meas - np.mean(F_meas)) ** 2))
                         r_squared = 1.0 - sse / ss_tot if ss_tot > 0 else float("nan")
 
-                        st.markdown("**Goodness of fit**")
-                        err_col1, err_col2, err_col3 = st.columns(3)
-                        err_col1.metric("SSE (least-squares cost)", f"{sse:.4f}")
-                        err_col2.metric("RMSE", f"{rmse:.4f}")
-                        err_col3.metric("R²", f"{r_squared:.4f}")
-                        if not fit.success:
-                            st.warning(f"Solver did not fully converge: {fit.message}")
-
-                        ax3.set_xlabel("Time (sec)")
-                        ax3.set_ylabel("Mean intensity")
-                        ax3.legend()
-                        fig3.tight_layout()
-                        st.pyplot(fig3)
-
+                        comparison_df = None
                         synthetic_params = st.session_state.get("synthetic_params")
                         if (
                             data_source == "Generate synthetic data from simulation"
@@ -881,7 +1280,6 @@ with fit_tab:
                             b_fit = kb_hat + kd_hat
                             G_fit = alpha_hat * km_hat
 
-                            st.markdown("**Synthetic data: input vs. fitted derived quantities**")
                             comparison_df = pd.DataFrame(
                                 {
                                     "Quantity": ["a = km + kd", "b = kb + kd", "G = alpha * km"],
@@ -889,9 +1287,7 @@ with fit_tab:
                                     "Least-squares output": [a_fit, b_fit, G_fit],
                                 }
                             )
-                            st.table(comparison_df.set_index("Quantity"))
-
-                        if (
+                        elif (
                             data_source == "Generate synthetic data from simulation"
                             and fit_is_two_step
                             and synthetic_params is not None
@@ -907,7 +1303,6 @@ with fit_tab:
                             b_fit = kb_hat + kd_hat
                             G3_fit = alpha_hat * k1_hat * k2_hat
 
-                            st.markdown("**Synthetic data: input vs. fitted derived quantities**")
                             comparison_df = pd.DataFrame(
                                 {
                                     "Quantity": ["a = k1 + kd", "c = k2 + kd", "b = kb + kd", "G3 = alpha * k1 * k2"],
@@ -915,7 +1310,70 @@ with fit_tab:
                                     "Least-squares output": [a_fit, c_fit, b_fit, G3_fit],
                                 }
                             )
-                            st.table(comparison_df.set_index("Quantity"))
+
+                        st.session_state["fit_single_result"] = {
+                            "is_two_step": fit_is_two_step,
+                            "t_raw": t_raw,
+                            "F_raw": F_raw,
+                            "F_meas": F_meas,
+                            "F_fit": F_fit,
+                            "title": fit_title,
+                            "metrics_cols": metrics_cols,
+                            "baseline": baseline,
+                            "sse": sse,
+                            "rmse": rmse,
+                            "r_squared": r_squared,
+                            "success": fit.success,
+                            "message": fit.message,
+                            "comparison_df": comparison_df,
+                        }
+
+                    fit_single_result = st.session_state.get("fit_single_result")
+                    if fit_single_result is None:
+                        st.info("Click **Fit Parameters** to fit the model to the selected data above.")
+                    else:
+                        fsr = fit_single_result
+
+                        st.success(
+                            f"Fit complete ({'2-step' if fsr['is_two_step'] else '1-step'} model)"
+                        )
+                        res_col1, res_col2, res_col3 = st.columns(3)
+                        for label, val in fsr["metrics_cols"]["col1"]:
+                            res_col1.metric(label, f"{val:.4f}")
+                        for label, val in fsr["metrics_cols"]["col2"]:
+                            res_col2.metric(label, f"{val:.4f}")
+                        for label, val in fsr["metrics_cols"]["col3"]:
+                            res_col3.metric(label, f"{val:.4f}")
+
+                        st.caption(f"Baseline subtracted = {fsr['baseline']:.4f}")
+
+                        st.markdown("**Goodness of fit**")
+                        err_col1, err_col2, err_col3 = st.columns(3)
+                        err_col1.metric("SSE (least-squares cost)", f"{fsr['sse']:.4f}")
+                        err_col2.metric("RMSE", f"{fsr['rmse']:.4f}")
+                        err_col3.metric("R²", f"{fsr['r_squared']:.4f}")
+                        if not fsr["success"]:
+                            st.warning(f"Solver did not fully converge: {fsr['message']}")
+
+                        fig3, ax3 = plt.subplots(figsize=(10, 6))
+                        ax3.plot(fsr["t_raw"], fsr["F_raw"], "k--", linewidth=1.5, label="Raw selected data")
+                        ax3.plot(fsr["t_raw"], fsr["F_meas"], "o", markersize=4, label="Baseline-corrected data")
+                        ax3.plot(
+                            fsr["t_raw"], fsr["F_fit"], "-", linewidth=2,
+                            label=("2-step model fit" if fsr["is_two_step"] else "1-step model fit"),
+                        )
+                        ax3.set_title(fsr["title"])
+                        ax3.set_xlabel("Time (sec)")
+                        ax3.set_ylabel("Mean intensity")
+                        ax3.legend()
+                        fig3.tight_layout()
+                        st.pyplot(fig3)
+
+                        if fsr["comparison_df"] is not None:
+                            st.markdown("**Synthetic data: input vs. fitted derived quantities**")
+                            st.table(fsr["comparison_df"].set_index("Quantity"))
+
+                    st.divider()
 
                     if multi_fit_button:
                         fixed_multi = {"u": u_step}
@@ -952,15 +1410,6 @@ with fit_tab:
                             param_names = ["I0", "km", "kb", "kd", "alpha"]
                             bounds_multi = ([0.0, 0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 5.0, 10.0])
                             residual_fn = residuals_1step
-
-                        st.caption(
-                            "Multi-start initial guesses centered on: "
-                            + (
-                                "synthetic input parameters (Simulation tab values used to generate this data)"
-                                if use_synthetic_centers
-                                else "advanced initial guesses above (no matching synthetic ground truth available)"
-                            )
-                        )
 
                         with st.spinner(f"Running multi-start fit ({int(n_multi_runs)} runs)..."):
                             results_df = run_multi_start(
@@ -1024,8 +1473,30 @@ with fit_tab:
                             "true_values": true_values,
                         })
 
+                        st.session_state["fit_multi_result"] = {
+                            "results_df": results_df,
+                            "param_names": param_names,
+                            "derived_names": derived_names,
+                            "true_values": true_values,
+                            "use_synthetic_centers": use_synthetic_centers,
+                        }
+
+                    fit_multi_result = st.session_state.get("fit_multi_result")
+                    if fit_multi_result is None:
+                        st.info("Click **Run Multi-Start Fit (N runs)** to run the fit.")
+                    else:
+                        st.caption(
+                            "Multi-start initial guesses centered on: "
+                            + (
+                                "synthetic input parameters (Simulation tab values used to generate this data)"
+                                if fit_multi_result["use_synthetic_centers"]
+                                else "advanced initial guesses above (no matching synthetic ground truth available)"
+                            )
+                        )
                         render_multi_start_results(
-                            results_df, param_names, derived_names, true_values, include_nonconverged,
+                            fit_multi_result["results_df"], fit_multi_result["param_names"],
+                            fit_multi_result["derived_names"], fit_multi_result["true_values"],
+                            include_nonconverged,
                         )
 
 with profile_tab:
@@ -1165,7 +1636,20 @@ with profile_tab:
                     "profile_df": profile_df,
                 })
 
-                render_profile_likelihood_result(profile_df, profile_target, true_value_p)
+                st.session_state["profile_1d_result"] = {
+                    "profile_df": profile_df,
+                    "profile_target": profile_target,
+                    "true_value": true_value_p,
+                }
+
+        profile_1d_result = st.session_state.get("profile_1d_result")
+        if profile_1d_result is None:
+            st.info("Click **Run Profile Likelihood** to compute a profile.")
+        else:
+            render_profile_likelihood_result(
+                profile_1d_result["profile_df"], profile_1d_result["profile_target"],
+                profile_1d_result["true_value"],
+            )
 
         st.divider()
         st.subheader("2D Profile Likelihood: a vs b")
@@ -1266,7 +1750,13 @@ with profile_tab:
                     "profile_df": profile_2d_df,
                 })
 
-                render_profile_2d_result(profile_2d_df)
+                st.session_state["profile_2d_result"] = {"profile_df": profile_2d_df}
+
+        profile_2d_result = st.session_state.get("profile_2d_result")
+        if profile_2d_result is None:
+            st.info("Click **Run 2D Profile Likelihood (a, b)** to compute a profile.")
+        else:
+            render_profile_2d_result(profile_2d_result["profile_df"])
 
 with bode_tab:
     st.markdown(
@@ -1275,8 +1765,8 @@ with bode_tab:
         "frequency, and the cutoff frequency above which dynamics are lost to "
         "maturation/bleaching. Plots the synthetic-data ground truth (if "
         "generated) and the most recent least-squares fit (if run) for "
-        "comparison; the -3 dB cutoff metrics below still use the "
-        "**Simulation** tab's current rate constants."
+        "comparison, using the **Simulation** tab's rate constants at the "
+        "time **Plot Bode Response** is clicked."
     )
 
     col_a, col_b, col_c = st.columns(3)
@@ -1306,23 +1796,11 @@ with bode_tab:
 
             if is_two_step:
                 w, mag, phase = bode_2step(alpha, k1, k2, kb, kd, w)
-                title_suffix = "2-step maturation model"
             else:
                 w, mag, phase = bode_1step(alpha, km, kb, kd, w)
-                title_suffix = "1-step maturation model"
-
-            fig4, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(8, 6))
-
-            ax_mag.set_ylabel("Magnitude (dB)")
-            ax_mag.set_xlabel("Frequency (rad/sec)")
-            ax_mag.set_title("Bode Plot")
-            ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
-
-            ax_phase.set_ylabel("Phase (degrees)")
-            ax_phase.set_xlabel("Frequency (rad/sec)")
-            ax_phase.grid(True, which="both", linestyle="--", alpha=0.5)
 
             synthetic_params = st.session_state.get("synthetic_params")
+            mag_syn = phase_syn = syn_label = None
             if synthetic_params is not None:
                 if synthetic_params["is_two_step"]:
                     _, mag_syn, phase_syn = bode_2step(
@@ -1336,10 +1814,9 @@ with bode_tab:
                         synthetic_params["kb"], synthetic_params["kd"], w,
                     )
                     syn_label = "Synthetic input (1-step)"
-                ax_mag.semilogx(w, mag_syn, color="tab:green", linestyle="--", label=syn_label)
-                ax_phase.semilogx(w, phase_syn, color="tab:green", linestyle="--", label=syn_label)
 
             fit_result = st.session_state.get("fit_result")
+            mag_fit = phase_fit = fit_label = None
             if fit_result is not None:
                 if fit_result["is_two_step"]:
                     _, mag_fit, phase_fit = bode_2step(
@@ -1353,10 +1830,46 @@ with bode_tab:
                         fit_result["kb"], fit_result["kd"], w,
                     )
                     fit_label = f"Least-squares fit (1-step, {fit_result['source_label']})"
-                ax_mag.semilogx(w, mag_fit, color="tab:red", linestyle=":", label=fit_label)
-                ax_phase.semilogx(w, phase_fit, color="tab:red", linestyle=":", label=fit_label)
 
-            has_overlay = synthetic_params is not None or fit_result is not None
+            wc_numerical = numerical_cutoff(w, mag)
+            if is_two_step:
+                wc_analytical = analytical_cutoff_2step(k1, k2, kb, kd)
+            else:
+                wc_analytical = analytical_cutoff_1step(km, kb, kd)
+
+        st.session_state["bode_result"] = {
+            "w": w, "mag": mag, "phase": phase,
+            "mag_syn": mag_syn, "phase_syn": phase_syn, "syn_label": syn_label,
+            "mag_fit": mag_fit, "phase_fit": phase_fit, "fit_label": fit_label,
+            "wc_numerical": wc_numerical, "wc_analytical": wc_analytical,
+        }
+
+    bode_result = st.session_state.get("bode_result")
+    if bode_result is None:
+        st.info("Set the frequency range and click **Plot Bode Response**.")
+    else:
+        br = bode_result
+        fig4, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(8, 6))
+
+        ax_mag.semilogx(br["w"], br["mag"])
+        ax_mag.set_ylabel("Magnitude (dB)")
+        ax_mag.set_xlabel("Frequency (rad/sec)")
+        ax_mag.set_title("Bode Plot")
+        ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
+
+        ax_phase.semilogx(br["w"], br["phase"])
+        ax_phase.set_ylabel("Phase (degrees)")
+        ax_phase.set_xlabel("Frequency (rad/sec)")
+        ax_phase.grid(True, which="both", linestyle="--", alpha=0.5)
+
+        has_overlay = br["mag_syn"] is not None or br["mag_fit"] is not None
+        if br["mag_syn"] is not None:
+            ax_mag.semilogx(br["w"], br["mag_syn"], color="tab:green", linestyle="--", label=br["syn_label"])
+            ax_phase.semilogx(br["w"], br["phase_syn"], color="tab:green", linestyle="--", label=br["syn_label"])
+        if br["mag_fit"] is not None:
+            ax_mag.semilogx(br["w"], br["mag_fit"], color="tab:red", linestyle=":", label=br["fit_label"])
+            ax_phase.semilogx(br["w"], br["phase_fit"], color="tab:red", linestyle=":", label=br["fit_label"])
+
         if has_overlay:
             ax_mag.legend(fontsize=8)
             ax_phase.legend(fontsize=8)
@@ -1371,24 +1884,16 @@ with bode_tab:
                 "Fitting tab to see curves here."
             )
 
-        wc_numerical = numerical_cutoff(w, mag)
         cutoff_col1, cutoff_col2 = st.columns(2)
-        if wc_numerical is not None:
-            cutoff_col1.metric("Numerical -3 dB cutoff (rad/sec)", f"{wc_numerical:.6f}")
+        if br["wc_numerical"] is not None:
+            cutoff_col1.metric("Numerical -3 dB cutoff (rad/sec)", f"{br['wc_numerical']:.6f}")
         else:
             cutoff_col1.warning("Cutoff not reached within the selected frequency range.")
 
-        if is_two_step:
-            wc_analytical = analytical_cutoff_2step(k1, k2, kb, kd)
-        else:
-            wc_analytical = analytical_cutoff_1step(km, kb, kd)
-
-        if wc_analytical is not None:
-            cutoff_col2.metric("Analytical -3 dB cutoff (rad/sec)", f"{wc_analytical:.6f}")
+        if br["wc_analytical"] is not None:
+            cutoff_col2.metric("Analytical -3 dB cutoff (rad/sec)", f"{br['wc_analytical']:.6f}")
         else:
             cutoff_col2.warning("No positive real cutoff root found.")
-    else:
-        st.info("Set the frequency range and click **Plot Bode Response**.")
 
 with ms_history_tab:
     st.markdown(
@@ -1409,10 +1914,13 @@ with ms_history_tab:
             "Fitting tab."
         )
     else:
+        displayed_ms = st.session_state.setdefault("ms_history_displayed", set())
+
         clear_col1, clear_col2 = st.columns([3, 1])
         with clear_col2:
             if st.button("Clear history", key="clear_ms_history"):
                 clear_multi_start_history()
+                st.session_state["ms_history_displayed"] = set()
                 st.rerun()
 
         for i in range(len(history) - 1, -1, -1):
@@ -1443,9 +1951,13 @@ with ms_history_tab:
 
                 if delete_clicked:
                     delete_multi_start_entry(i)
+                    st.session_state["ms_history_displayed"] = set()
                     st.rerun()
 
                 if display_clicked:
+                    displayed_ms.add(i)
+
+                if i in displayed_ms:
                     render_multi_start_results(
                         entry["results_df"], entry["param_names"], entry["derived_names"],
                         entry["true_values"], hist_include_nonconverged,
@@ -1472,10 +1984,13 @@ with pl_history_tab:
             "**Profile Likelihood** tab."
         )
     else:
+        displayed_pl = st.session_state.setdefault("pl_history_displayed", set())
+
         clear_col1, clear_col2 = st.columns([3, 1])
         with clear_col2:
             if st.button("Clear history", key="clear_pl_history"):
                 clear_profile_history()
+                st.session_state["pl_history_displayed"] = set()
                 st.rerun()
 
         # Group entries by dataset, preserving first-seen (oldest-first) order.
@@ -1574,9 +2089,13 @@ with pl_history_tab:
 
                         if delete_clicked_p:
                             delete_profile_entry(idx)
+                            st.session_state["pl_history_displayed"] = set()
                             st.rerun()
 
                         if display_clicked_p:
+                            displayed_pl.add(idx)
+
+                        if idx in displayed_pl:
                             if profile_type == "2d":
                                 render_profile_2d_result(entry["profile_df"])
                             else:
