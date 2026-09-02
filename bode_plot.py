@@ -29,6 +29,18 @@ def bode_2step(alpha, k1, k2, kb, kd, w):
     return signal.bode(sys, w=w)
 
 
+def transfer_function_bleach(alpha, M0, kb, kd):
+    """Laplace transform of the bleaching-only model's impulse response A*exp(-b*t), A = alpha*M0, b = kb+kd."""
+    num = [alpha * M0]
+    den = [1, kb + kd]
+    return signal.TransferFunction(num, den)
+
+
+def bode_bleach(alpha, M0, kb, kd, w):
+    sys = transfer_function_bleach(alpha, M0, kb, kd)
+    return signal.bode(sys, w=w)
+
+
 def analytical_cutoff_1step(km, kb, kd):
     """Exact -3 dB cutoff frequency for the 1-step model's two real poles."""
     p1 = km + kd
@@ -60,6 +72,11 @@ def analytical_cutoff_2step(k1, k2, kb, kd):
     if len(real_positive) == 0:
         return None
     return np.sqrt(real_positive[0])
+
+
+def analytical_cutoff_bleach(kb, kd):
+    """Exact -3 dB cutoff frequency for the bleaching-only model's single real pole (= kb + kd)."""
+    return kb + kd
 
 
 def numerical_cutoff(w, mag):
