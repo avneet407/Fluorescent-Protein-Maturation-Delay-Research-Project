@@ -65,14 +65,16 @@ def simulate_2step_known_b(t, params, I0, X0, M0):
 # ---------------------------------------------------------
 
 def residuals_1step_known_b(x, t, F_meas, fixed):
-    I0, km, kd, alpha = x
-    params = {"u": fixed["u"], "km": km, "kd": kd, "alpha": alpha, "b": fixed["b"]}
+    # kd is fixed at 0 (growth halted) rather than fitted.
+    I0, km, alpha = x
+    params = {"u": fixed["u"], "km": km, "kd": 0.0, "alpha": alpha, "b": fixed["b"]}
     _, I, M, F = simulate_1step_known_b(t, params, I0=I0, M0=0.0)
     return F - F_meas
 
 
 def residuals_2step_known_b(x, t, F_meas, fixed):
-    I0, k1, k2, kd, alpha = x
-    params = {"u": fixed["u"], "k1": k1, "k2": k2, "kd": kd, "alpha": alpha, "b": fixed["b"]}
+    # kd is fixed at 0 (growth halted) rather than fitted.
+    I0, k1, k2, alpha = x
+    params = {"u": fixed["u"], "k1": k1, "k2": k2, "kd": 0.0, "alpha": alpha, "b": fixed["b"]}
     _, I, X, M, F = simulate_2step_known_b(t, params, I0=I0, X0=0.0, M0=0.0)
     return F - F_meas

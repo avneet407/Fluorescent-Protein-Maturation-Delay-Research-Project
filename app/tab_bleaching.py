@@ -1,10 +1,10 @@
 # --- Bleaching Only Simulation tab -----------------------------------
-# Three things, in order: (1) simulate/fit a pure photobleaching-decay model
+# Two things, in order: (1) simulate/fit a pure photobleaching-decay model
 # (M(t) = M0*exp(-b*t), no maturation) to estimate b = kb+kd directly; (2)
 # reuse that b as a *fixed* value in a fit of the full maturation model
-# ("known bleaching pole fit"), removing one free parameter; (3) Bode-plot
-# each fit's result against the synthetic input. Runs are saved together to
-# the Bleaching Fit History tab from the known-b fit's Bode button.
+# ("known bleaching pole fit"), removing one free parameter. Both fits are
+# saved together to the Bleaching Fit History tab when the known-b fit's
+# "Run Multi-Start Fit" button is clicked (the last step in the tab).
 
 from datetime import datetime
 
@@ -18,26 +18,12 @@ from Maturation_Model_Known_Bleaching_Pole import (
     residuals_1step_known_b,
     residuals_2step_known_b,
 )
-from bode_plot import (
-    bode_1step,
-    bode_2step,
-    bode_bleach,
-    analytical_cutoff_1step,
-    analytical_cutoff_2step,
-    analytical_cutoff_bleach,
-)
 from gaussian_noise import simulate_bleach_noisy, add_measurement_noise
 from multi_start_fit import run_multi_start
 from multi_start_plots import plot_histograms
 from history_store import append_bleach_entry
 
-from app.shared import (
-    FORMULA_1STEP,
-    FORMULA_2STEP,
-    FORMULA_BLEACH,
-    render_bode_result,
-    render_multi_start_results,
-)
+from app.shared import render_multi_start_results
 
 
 def _multi_start_part(result):
@@ -63,17 +49,15 @@ def _multi_start_part(result):
 def _save_bleach_tab_history_entry():
     """Save the current Bleaching Only tab state as one combined history entry.
 
-    Called whenever either "Plot Bode Response" button in that tab (the
-    bleach-only fit's or the known bleaching pole fit's) is clicked, bundling
-    everything currently run in the tab this session: both fits and both
-    Bode plots. Any piece not yet run is saved as None.
+    Called when the known bleaching pole fit's "Run Multi-Start Fit" button
+    is clicked (the last step in the tab), bundling everything currently run
+    in the tab this session: both fits. Any piece not yet run is saved as
+    None.
     """
     append_bleach_entry({
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "bleach_only": _multi_start_part(st.session_state.get("bleach_multi_result")),
-        "bleach_bode": st.session_state.get("bleach_bode_result"),
         "known_b": _multi_start_part(st.session_state.get("known_b_multi_result")),
-        "known_b_bode": st.session_state.get("known_b_bode_result"),
     })
 
 
@@ -104,7 +88,7 @@ def render_bleaching_tab():
         )
 
     st.session_state.setdefault("bleach_kb", 0.02)
-    st.session_state.setdefault("bleach_kd", 0.01)
+    st.session_state.setdefault("bleach_kd", 0.0)
     st.session_state.setdefault("bleach_alpha", 1.0)
 
     sim_run_version = st.session_state.get("sim_run_version")
@@ -134,7 +118,7 @@ def render_bleaching_tab():
     with bleach_rc_cols[1]:
         kd_bleach = st.number_input(
             "kd - degradation / dilution rate", min_value=0.0, step=0.005, format="%.4f",
-            help="Suggested range: 0.001-0.05 /sec. Illustrative default: 0.01. Synced from the "
+            help="Suggested range: 0.001-0.05 /sec. Default: 0 (growth halted). Synced from the "
                  "Simulation tab's kd after a run, but can be overridden here.",
             key="bleach_kd",
         )
@@ -278,22 +262,22 @@ def render_bleaching_tab():
             st.pyplot(fig_syn_b)
 
         st.divider()
-        # Fits M0, kb, kd, alpha (Bleaching_Only_Model.residuals_bleach) from
+        # Fits M0, kb, alpha (Bleaching_Only_Model.residuals_bleach) from
         # many randomized initial guesses against the synthetic data above.
+        # kd is fixed at 0 (growth halted) rather than fitted.
         st.subheader("Multi-start least-squares fit")
 
         if bleach_synth is None:
             st.info("Generate synthetic data above to fit against.")
         else:
             st.markdown(
-                "Repeats a least-squares fit of M0, kb, kd, and alpha to the "
+                "Repeats a least-squares fit of M0, kb, and alpha to the "
                 "synthetic data above from many independently randomized "
                 "initial guesses, log-uniform over one decade centered on the "
                 "synthetic input parameters, to check convergence robustness "
-                "and parameter identifiability. Note that kb and kd trade off "
-                "against each other since only b = kb + kd is identifiable "
-                "from F(t) alone, and similarly alpha and M0 only enter as "
-                "A = alpha * M0."
+                "and parameter identifiability. kd is fixed at 0 (growth "
+                "halted) rather than fitted, so kb alone is the decay rate "
+                "b = kb + kd. alpha and M0 only enter as A = alpha * M0."
             )
 
             fit_col1_bleach, fit_col2_bleach = st.columns(2)
@@ -318,12 +302,15 @@ def render_bleaching_tab():
             multi_fit_button_bleach = st.button("Run Multi-Start Fit (N runs)", key="bleach_multi_fit_button")
 
             if multi_fit_button_bleach:
-                param_names_bleach = ["M0", "kb", "kd", "alpha"]
+                # kd is fixed at 0 in the fit itself (residuals_bleach); it's
+                # still reported below as a (constant) derived value so b and
+                # the summary table keep their usual shape.
+                param_names_bleach = ["M0", "kb", "alpha"]
                 centers_bleach = [
                     bleach_synth_params["M0"], bleach_synth_params["kb"],
-                    bleach_synth_params["kd"], bleach_synth_params["alpha"],
+                    bleach_synth_params["alpha"],
                 ]
-                bounds_bleach = ([0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 10.0])
+                bounds_bleach = ([0.0, 0.0, 0.1], [1e6, 5.0, 10.0])
 
                 with st.spinner(f"Running multi-start fit ({int(n_multi_runs_bleach)} runs)..."):
                     results_df_bleach = run_multi_start(
@@ -332,15 +319,16 @@ def render_bleaching_tab():
                         seed=multi_seed_bleach,
                     )
 
+                results_df_bleach["kd"] = 0.0
                 results_df_bleach["b"] = results_df_bleach["kb"] + results_df_bleach["kd"]
                 results_df_bleach["A"] = results_df_bleach["alpha"] * results_df_bleach["M0"]
-                derived_names_bleach = ["b", "A"]
+                derived_names_bleach = ["kd", "b", "A"]
 
                 true_values_bleach = {
                     "M0": bleach_synth_params["M0"],
                     "kb": bleach_synth_params["kb"],
-                    "kd": bleach_synth_params["kd"],
                     "alpha": bleach_synth_params["alpha"],
+                    "kd": bleach_synth_params["kd"],
                     "b": bleach_synth_params["kb"] + bleach_synth_params["kd"],
                     "A": bleach_synth_params["alpha"] * bleach_synth_params["M0"],
                 }
@@ -366,88 +354,6 @@ def render_bleaching_tab():
                     include_nonconverged_bleach,
                 )
 
-                # Bode plot for the single-pole pure-decay model (bode_bleach),
-                # comparing the synthetic input pole to the mean fitted pole.
-                st.markdown("**Bode plot: synthetic input vs. multi-start fit**")
-                st.caption(
-                    "This plot is not saved to history on its own — run the known "
-                    "bleaching pole fit's Bode plot below to save everything currently "
-                    "run in this tab (including this plot) as one entry in the "
-                    "**Bleaching tab fit history**."
-                )
-                bode_freq_cols_bleach = st.columns(3)
-                with bode_freq_cols_bleach[0]:
-                    bode_w_start_bleach = st.number_input(
-                        "Frequency range: 10^ (start)", value=-3.0, step=1.0, key="bleach_bode_w_start",
-                    )
-                with bode_freq_cols_bleach[1]:
-                    bode_w_end_bleach = st.number_input(
-                        "Frequency range: 10^ (end)", value=1.0, step=1.0, key="bleach_bode_w_end",
-                    )
-                with bode_freq_cols_bleach[2]:
-                    bode_w_points_bleach = st.number_input(
-                        "Number of frequency points", min_value=10, value=1000, step=100,
-                        key="bleach_bode_w_points",
-                    )
-
-                bode_button_bleach = st.button("Plot Bode Response", key="bleach_bode_button")
-
-                if bode_button_bleach:
-                    bode_plot_df_bleach = (
-                        bleach_multi_result["results_df"] if include_nonconverged_bleach
-                        else bleach_multi_result["results_df"][bleach_multi_result["results_df"]["converged"]]
-                    )
-
-                    if len(bode_plot_df_bleach) == 0:
-                        st.warning(
-                            "No runs to plot (no converged runs, and non-converged "
-                            "runs are excluded)."
-                        )
-                    else:
-                        # alpha and M0 (and to a lesser extent kb/kd) are not all
-                        # individually identifiable — averaging them separately
-                        # across runs biases the reconstructed amplitude, since
-                        # runs scatter along the alpha*M0=A ridge and anti-correlate.
-                        # Use the single best-converged run (lowest least-squares
-                        # cost) instead: one run's own fitted parameters are always
-                        # mutually consistent, so this sidesteps the averaging bias.
-                        best_run_bleach = bode_plot_df_bleach.loc[bode_plot_df_bleach["cost"].idxmin()]
-                        fit_M0_bode = float(best_run_bleach["M0"])
-                        fit_kb_bode = float(best_run_bleach["kb"])
-                        fit_kd_bode = float(best_run_bleach["kd"])
-                        fit_alpha_bode = float(best_run_bleach["alpha"])
-                        fit_label_bode = f"Multi-start fit (best of {len(bode_plot_df_bleach)} runs, lowest cost)"
-
-                        w_bleach = np.logspace(bode_w_start_bleach, bode_w_end_bleach, int(bode_w_points_bleach))
-
-                        _, mag_syn_bleach, phase_syn_bleach = bode_bleach(
-                            bleach_synth_params["alpha"], bleach_synth_params["M0"],
-                            bleach_synth_params["kb"], bleach_synth_params["kd"], w_bleach,
-                        )
-                        _, mag_fit_bleach, phase_fit_bleach = bode_bleach(
-                            fit_alpha_bode, fit_M0_bode, fit_kb_bode, fit_kd_bode, w_bleach,
-                        )
-
-                        st.session_state["bleach_bode_result"] = {
-                            "w": w_bleach.tolist(),
-                            "mag_syn": mag_syn_bleach.tolist(),
-                            "phase_syn": phase_syn_bleach.tolist(),
-                            "mag_fit": mag_fit_bleach.tolist(),
-                            "phase_fit": phase_fit_bleach.tolist(),
-                            "fit_label": fit_label_bode,
-                            "cutoff_syn": analytical_cutoff_bleach(
-                                bleach_synth_params["kb"], bleach_synth_params["kd"],
-                            ),
-                            "cutoff_fit": analytical_cutoff_bleach(fit_kb_bode, fit_kd_bode),
-                            "formula_latex": FORMULA_BLEACH,
-                        }
-
-                bleach_bode_result = st.session_state.get("bleach_bode_result")
-                if bleach_bode_result is None:
-                    st.info("Set the frequency range and click **Plot Bode Response**.")
-                else:
-                    render_bode_result(bleach_bode_result, "Bode Plot — Bleaching-Only Model")
-
     st.divider()
     # Fits the full model (Maturation_Model_Known_Bleaching_Pole.py) with
     # b = kb+kd fixed to the value entered below, using the synthetic data
@@ -457,12 +363,14 @@ def render_bleaching_tab():
         "Fits the full maturation model to the synthetic fluorescence trace "
         "generated in the **Data** tab, treating b = kb + kd as fixed and "
         "known (e.g. estimated above from the bleaching-only multi-start "
-        "fit) rather than estimated. Multi-start initial guesses are still "
-        "centered on the synthetic input parameters (log-uniform, one "
-        "decade span); since several of the raw fitted parameters (I0, "
-        "km/k1/k2, kd, alpha) are not individually identifiable on their "
-        "own, only the identifiable derived quantities are reported below, "
-        "compared to their synthetic input values."
+        "fit) rather than estimated. kd is fixed at 0 (growth halted) "
+        "rather than fitted, so kb = b directly. Multi-start initial "
+        "guesses are still centered on the synthetic input parameters "
+        "(log-uniform, one decade span); since several of the raw fitted "
+        "parameters (I0, km/k1/k2, alpha) are not individually "
+        "identifiable on their own, only the identifiable derived "
+        "quantities are reported below, compared to their synthetic input "
+        "values."
     )
 
     data_kb = st.session_state.get("current_data")
@@ -529,23 +437,25 @@ def render_bleaching_tab():
         multi_fit_button_kb = st.button("Run Multi-Start Fit (N runs)", key="known_b_multi_fit_button")
 
         if multi_fit_button_kb:
+            # kd is fixed at 0 in the fit itself (residuals_*_known_b); it's
+            # still reported below as a (constant) derived value.
             fixed_kb = {"u": u_step_kb, "b": b_known}
 
             if fit_is_two_step_kb:
                 centers_kb = [
                     synthetic_params_kb["I0"], synthetic_params_kb["k1"],
-                    synthetic_params_kb["k2"], synthetic_params_kb["kd"], synthetic_params_kb["alpha"],
+                    synthetic_params_kb["k2"], synthetic_params_kb["alpha"],
                 ]
-                param_names_kb = ["I0", "k1", "k2", "kd", "alpha"]
-                bounds_kb = ([0.0, 0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 5.0, 10.0])
+                param_names_kb = ["I0", "k1", "k2", "alpha"]
+                bounds_kb = ([0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 10.0])
                 residual_fn_kb = residuals_2step_known_b
             else:
                 centers_kb = [
                     synthetic_params_kb["I0"], synthetic_params_kb["km"],
-                    synthetic_params_kb["kd"], synthetic_params_kb["alpha"],
+                    synthetic_params_kb["alpha"],
                 ]
-                param_names_kb = ["I0", "km", "kd", "alpha"]
-                bounds_kb = ([0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 10.0])
+                param_names_kb = ["I0", "km", "alpha"]
+                bounds_kb = ([0.0, 0.0, 0.1], [1e6, 5.0, 10.0])
                 residual_fn_kb = residuals_1step_known_b
 
             with st.spinner(f"Running multi-start fit ({int(n_multi_runs_kb)} runs)..."):
@@ -555,19 +465,20 @@ def render_bleaching_tab():
                     seed=multi_seed_kb,
                 )
 
+            results_df_kb["kd"] = 0.0
             if fit_is_two_step_kb:
                 results_df_kb["a"] = results_df_kb["k1"] + results_df_kb["kd"]
                 results_df_kb["c"] = results_df_kb["k2"] + results_df_kb["kd"]
                 results_df_kb["G3"] = results_df_kb["alpha"] * results_df_kb["k1"] * results_df_kb["k2"]
                 results_df_kb["G3*I0"] = results_df_kb["G3"] * results_df_kb["I0"]
-                derived_names_kb = ["a", "c", "G3", "G3*I0"]
+                derived_names_kb = ["kd", "a", "c", "G3", "G3*I0"]
             else:
                 results_df_kb["a"] = results_df_kb["km"] + results_df_kb["kd"]
                 results_df_kb["G"] = results_df_kb["alpha"] * results_df_kb["km"]
                 results_df_kb["G*I0"] = results_df_kb["G"] * results_df_kb["I0"]
-                derived_names_kb = ["a", "G", "G*I0"]
+                derived_names_kb = ["kd", "a", "G", "G*I0"]
 
-            true_values_kb = {}
+            true_values_kb = {"kd": synthetic_params_kb["kd"]}
             if fit_is_two_step_kb:
                 true_values_kb["a"] = synthetic_params_kb["k1"] + synthetic_params_kb["kd"]
                 true_values_kb["c"] = synthetic_params_kb["k2"] + synthetic_params_kb["kd"]
@@ -592,6 +503,8 @@ def render_bleaching_tab():
                 },
             }
 
+            _save_bleach_tab_history_entry()
+
         known_b_multi_result = st.session_state.get("known_b_multi_result")
         if known_b_multi_result is None:
             st.info("Click **Run Multi-Start Fit (N runs)** to fit against the synthetic data.")
@@ -599,7 +512,10 @@ def render_bleaching_tab():
             st.caption(
                 "Multi-start initial guesses centered on: synthetic input "
                 "parameters (Simulation tab values used to generate this "
-                "data); b is fixed at the value entered above, not estimated."
+                "data); b is fixed at the value entered above, not estimated. "
+                "Running this fit saves everything currently run in this tab "
+                "— this fit and the bleach-only fit above, if run — as one "
+                "entry in the **Bleaching tab fit history** below."
             )
 
             results_df_kb = known_b_multi_result["results_df"]
@@ -645,9 +561,10 @@ def render_bleaching_tab():
                     st.markdown(
                         "Each run shows two rows: its final **Fitted** values, and the "
                         "**Initial guess** it started from directly below. Raw fitted "
-                        "parameters (I0, km/k1/k2, kd, alpha) are included here for "
+                        "parameters (I0, km/k1/k2, alpha) are included here for "
                         "inspection even though they are not individually identifiable "
-                        "on their own; b is fixed at the value entered above, not fitted."
+                        "on their own; b is fixed at the value entered above, and kd is "
+                        "fixed at 0 (growth halted) — neither is fitted."
                     )
                     detail_cols_kb = (
                         ["run", "Type"] + param_names_kb + derived_names_kb
@@ -677,116 +594,3 @@ def render_bleaching_tab():
                         })
                     detail_df_kb = pd.DataFrame(detail_rows_kb, columns=detail_cols_kb)
                     st.dataframe(detail_df_kb, hide_index=True)
-
-                # Bode plot for the full model (bode_1step/bode_2step), using
-                # kb = b_known - mean fitted kd (see comment below on why that
-                # split is valid) so the correct poles are reproduced.
-                st.markdown("**Bode plot: synthetic input vs. multi-start fit**")
-                st.caption(
-                    "Clicking **Plot Bode Response** saves everything currently run in "
-                    "this tab — this known bleaching pole fit and Bode plot, plus the "
-                    "bleach-only fit and its Bode plot if run — together as one entry in "
-                    "the **Bleaching tab fit history** below. This is the only action in "
-                    "the tab that saves to history."
-                )
-                bode_freq_cols_kb = st.columns(3)
-                with bode_freq_cols_kb[0]:
-                    bode_w_start_kb = st.number_input(
-                        "Frequency range: 10^ (start)",
-                        value=-4.0 if fit_is_two_step_kb else -3.0, step=1.0, key="known_b_bode_w_start",
-                    )
-                with bode_freq_cols_kb[1]:
-                    bode_w_end_kb = st.number_input(
-                        "Frequency range: 10^ (end)",
-                        value=2.0 if fit_is_two_step_kb else 1.0, step=1.0, key="known_b_bode_w_end",
-                    )
-                with bode_freq_cols_kb[2]:
-                    bode_w_points_kb = st.number_input(
-                        "Number of frequency points",
-                        min_value=10, value=1200 if fit_is_two_step_kb else 1000, step=100,
-                        key="known_b_bode_w_points",
-                    )
-
-                bode_button_kb = st.button("Plot Bode Response", key="known_b_bode_button")
-
-                if bode_button_kb:
-                    if len(plot_df_kb) == 0:
-                        st.warning(
-                            "No runs to plot (no converged runs, and non-converged "
-                            "runs are excluded)."
-                        )
-                    else:
-                        # Raw fitted params (km/k1/k2, kd, alpha) aren't all
-                        # individually identifiable — averaging them separately
-                        # across runs would bias the reconstructed transfer
-                        # function (same issue as the bleach-only fit above).
-                        # Use the single best-converged run (lowest least-squares
-                        # cost) instead, so alpha/km/kd stay mutually consistent.
-                        b_known_fit = known_b_multi_result["extra_info"]["b_known"]
-                        best_row_kb = plot_df_kb.loc[plot_df_kb["cost"].idxmin()]
-                        fit_kd_bode_kb = float(best_row_kb["kd"])
-                        fit_alpha_bode_kb = float(best_row_kb["alpha"])
-                        # kb isn't itself fitted (only b = kb + kd is fixed) — this split
-                        # reproduces the correct poles (km+kd, b_known) regardless of the
-                        # split chosen, since transfer_function_*step only uses kb+kd.
-                        fit_kb_bode_kb = b_known_fit - fit_kd_bode_kb
-                        fit_label_bode_kb = f"Multi-start fit (best of {len(plot_df_kb)} runs, lowest cost)"
-
-                        w_kb = np.logspace(bode_w_start_kb, bode_w_end_kb, int(bode_w_points_kb))
-
-                        if fit_is_two_step_kb:
-                            fit_k1_bode_kb = float(best_row_kb["k1"])
-                            fit_k2_bode_kb = float(best_row_kb["k2"])
-                            _, mag_syn_kb, phase_syn_kb = bode_2step(
-                                synthetic_params_kb["alpha"], synthetic_params_kb["k1"],
-                                synthetic_params_kb["k2"], synthetic_params_kb["kb"],
-                                synthetic_params_kb["kd"], w_kb,
-                            )
-                            _, mag_fit_kb, phase_fit_kb = bode_2step(
-                                fit_alpha_bode_kb, fit_k1_bode_kb, fit_k2_bode_kb,
-                                fit_kb_bode_kb, fit_kd_bode_kb, w_kb,
-                            )
-                            cutoff_syn_kb = analytical_cutoff_2step(
-                                synthetic_params_kb["k1"], synthetic_params_kb["k2"],
-                                synthetic_params_kb["kb"], synthetic_params_kb["kd"],
-                            )
-                            cutoff_fit_kb = analytical_cutoff_2step(
-                                fit_k1_bode_kb, fit_k2_bode_kb, fit_kb_bode_kb, fit_kd_bode_kb,
-                            )
-                        else:
-                            fit_km_bode_kb = float(best_row_kb["km"])
-                            _, mag_syn_kb, phase_syn_kb = bode_1step(
-                                synthetic_params_kb["alpha"], synthetic_params_kb["km"],
-                                synthetic_params_kb["kb"], synthetic_params_kb["kd"], w_kb,
-                            )
-                            _, mag_fit_kb, phase_fit_kb = bode_1step(
-                                fit_alpha_bode_kb, fit_km_bode_kb, fit_kb_bode_kb, fit_kd_bode_kb, w_kb,
-                            )
-                            cutoff_syn_kb = analytical_cutoff_1step(
-                                synthetic_params_kb["km"], synthetic_params_kb["kb"], synthetic_params_kb["kd"],
-                            )
-                            cutoff_fit_kb = analytical_cutoff_1step(
-                                fit_km_bode_kb, fit_kb_bode_kb, fit_kd_bode_kb,
-                            )
-
-                        st.session_state["known_b_bode_result"] = {
-                            "w": w_kb.tolist(),
-                            "mag_syn": mag_syn_kb.tolist(),
-                            "phase_syn": phase_syn_kb.tolist(),
-                            "mag_fit": mag_fit_kb.tolist(),
-                            "phase_fit": phase_fit_kb.tolist(),
-                            "fit_label": fit_label_bode_kb,
-                            "cutoff_syn": cutoff_syn_kb,
-                            "cutoff_fit": cutoff_fit_kb,
-                            "formula_latex": FORMULA_2STEP if fit_is_two_step_kb else FORMULA_1STEP,
-                        }
-
-                        _save_bleach_tab_history_entry()
-
-                known_b_bode_result = st.session_state.get("known_b_bode_result")
-                if known_b_bode_result is None:
-                    st.info("Set the frequency range and click **Plot Bode Response**.")
-                else:
-                    render_bode_result(
-                        known_b_bode_result, "Bode Plot — Known Bleaching Pole Fit (Full Model)",
-                    )

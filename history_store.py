@@ -156,14 +156,15 @@ def delete_profile_entry(index):
 # ---------------------------------------------------------
 #
 # Each entry bundles everything run in the Bleaching Only tab up to the
-# moment either "Plot Bode Response" button was clicked: the bleach-only fit
-# ("bleach_only": M0, kb, kd, alpha against a pure-decay trace), its Bode
-# magnitude/phase plot ("bleach_bode"), the known bleaching pole fit
-# ("known_b": the full maturation model with b = kb + kd fixed), and its
-# Bode plot ("known_b_bode"). Whichever pair (fit + Bode) triggered the save
-# is present; the other pair is whatever was last run this session, or None
-# if it hadn't been run at all. `known_b`'s `extra_info` carries fit-specific
-# context (which maturation model, the fixed b value).
+# moment the known-b fit's "Run Multi-Start Fit" button was clicked: the
+# bleach-only fit ("bleach_only": M0, kb, alpha against a pure-decay trace,
+# kd fixed at 0) and the known bleaching pole fit ("known_b": the full
+# maturation model with b = kb + kd fixed and kd fixed at 0). `bleach_only`
+# is whatever was last run this session, or None if it hadn't been run at
+# all. `known_b`'s `extra_info` carries fit-specific context (which
+# maturation model, the fixed b value). Older entries (saved before Bode
+# plots were removed from the tab) may still carry "bleach_bode"/
+# "known_b_bode" keys; these are preserved on disk but no longer read.
 
 def _bleach_part_to_record(part):
     """Convert one in-memory fit-result part (with a DataFrame) to a JSON-safe dict, or None."""

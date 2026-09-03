@@ -47,7 +47,9 @@ def analytical_F(t, A, kb, kd):
 # ---------------------------------------------------------
 
 def residuals_bleach(x, t, F_meas):
-    M0, kb, kd, alpha = x
-    params = {"kb": kb, "kd": kd, "alpha": alpha}
+    # kd is fixed at 0 (growth halted) rather than fitted; only M0, kb, and
+    # alpha are free parameters here.
+    M0, kb, alpha = x
+    params = {"kb": kb, "kd": 0.0, "alpha": alpha}
     _, M, B, F = simulate_bleach(t, params, M0=M0, B0=0.0)
     return F - F_meas

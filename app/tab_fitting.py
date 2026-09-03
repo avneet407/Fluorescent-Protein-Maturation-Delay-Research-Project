@@ -104,7 +104,7 @@ def render_fitting_tab():
                         else:
                             km_guess = st.number_input("km initial guess", value=0.10, format="%.3f")
                         kb_guess = st.number_input("kb initial guess", value=0.01, format="%.4f")
-                        kd_guess = st.number_input("kd initial guess", value=0.005, format="%.4f")
+                        kd_guess = st.number_input("kd initial guess", value=0.0, format="%.4f")
                         alpha_guess = st.number_input("alpha initial guess", value=1.0, format="%.3f")
 
                     if fit_is_two_step:

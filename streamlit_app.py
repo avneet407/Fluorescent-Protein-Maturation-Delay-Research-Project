@@ -10,11 +10,12 @@ of the full model.
 This file is the thin entry point: it sets up the page and the tab strip,
 then delegates each tab's content to a `render_*` function in `app/`. The
 Simulation tab's render function returns a `sim_state` dict of its current
-widget values, passed into the Data and Bode Plot tabs (the only two that
-need "what's currently set in the Simulation tab" as defaults) -- the same
-data flow the original single-file version had via plain script-level
-variables, made explicit now that each tab lives in its own module. Every
-other tab communicates via `st.session_state`, same as before.
+widget values, passed into the Data tab (the only other one that needs
+"what's currently set in the Simulation tab" as defaults) -- the same data
+flow the original single-file version had via plain script-level variables,
+made explicit now that each tab lives in its own module. Every other tab
+(including Bode Plot, which takes its own directly-entered parameter sets)
+communicates via `st.session_state`, same as before.
 
 The plain-Python model/fitting/plotting logic lives in the sibling modules
 imported by the `app/` tab modules (Maturation_Models.py,
@@ -45,7 +46,8 @@ from app.tab_profile_history import render_profile_history_tab
 #   Bleaching Fit History    - saved runs from the tab above
 #   Least Squares Fitting    - single and multi-start fits of the full model
 #   Profile Likelihood       - parameter identifiability sweeps (1D and 2D)
-#   Bode Plot                - frequency response of the full model
+#   Bode Plot                - frequency response of the full model for
+#                              user-entered parameter sets, overlaid
 #   Multi-Start History      - saved multi-start fit runs
 #   Profile Likelihood History - saved profile likelihood runs
 
@@ -82,7 +84,7 @@ with profile_tab:
     render_profile_likelihood_tab()
 
 with bode_tab:
-    render_bode_tab(sim_state)
+    render_bode_tab()
 
 with ms_history_tab:
     render_multistart_history_tab()

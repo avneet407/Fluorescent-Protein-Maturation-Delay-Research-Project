@@ -75,8 +75,8 @@ def render_simulation_tab():
             )
     with rc_cols[2]:
         kd = st.number_input(
-            "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
-            help="Suggested range: 0.001-0.05 /sec. Applies to all species. Illustrative default: 0.01.",
+            "kd - degradation / dilution rate", min_value=0.0, value=0.0, step=0.005, format="%.4f",
+            help="Suggested range: 0.001-0.05 /sec. Applies to all species. Default: 0 (growth halted).",
         )
     with rc_cols[3]:
         kb = st.number_input(
