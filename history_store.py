@@ -16,6 +16,7 @@ MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 MULTI_START_HISTORY_FILE = os.path.join(MODULE_DIR, "multi_start_history.json")
 PROFILE_HISTORY_FILE = os.path.join(MODULE_DIR, "profile_likelihood_history.json")
 BLEACH_HISTORY_FILE = os.path.join(MODULE_DIR, "bleach_fit_history.json")
+VARIABLE_BLEACH_HISTORY_FILE = os.path.join(MODULE_DIR, "variable_bleaching_history.json")
 
 
 def _load_records(path):
@@ -264,3 +265,83 @@ def delete_bleach_entry(index):
     if 0 <= index < len(records):
         del records[index]
         _save_records(BLEACH_HISTORY_FILE, records)
+
+
+# ---------------------------------------------------------
+# Variable Bleaching tab fit history
+# ---------------------------------------------------------
+#
+# Each entry is one multi-start joint least-squares fit run from the
+# Variable Bleaching tab: the shared km (or k1/k2) and every trace's kb and
+# K = G*I0 / G3*I0 are re-fit from many independently randomized initial
+# guesses (log-uniform, one decade span, centered on the true synthetic
+# input), to check convergence robustness -- same convention as the other
+# multi-start fits in this app. `results_df` holds one row per run (each
+# parameter's `{name}_init` and fitted value, plus cost/converged/message/
+# nfev); `param_names` (== [shared_names] + "kb_i"/"K_i" per trace, 1-based)
+# and `trace_labels` (parallel to the trace index used in those names) are
+# needed to make sense of its columns. Also stored: the noise standard
+# deviations used to generate the fitted synthetic data, and the
+# initial-guess random seed (None if not fixed).
+#
+# Older entries (saved before this tab used multi-start fitting) carry a
+# different, single-run schema (shared_true/shared_init/shared_fitted,
+# per_trace_rows) instead of results_df; the history tab detects and
+# displays those separately.
+
+def _vb_entry_to_record(entry):
+    """Convert one in-memory Variable Bleaching fit entry to a JSON-safe dict."""
+    return {
+        "timestamp": entry["timestamp"],
+        "is_two_step": bool(entry["is_two_step"]),
+        "n_traces": int(entry["n_traces"]),
+        "n_runs": int(entry["n_runs"]),
+        "shared_names": list(entry["shared_names"]),
+        "trace_labels": list(entry["trace_labels"]),
+        "param_names": list(entry["param_names"]),
+        "true_values": entry["true_values"],
+        "results_records": json.loads(entry["results_df"].to_json(orient="records")),
+        "u": float(entry["u"]),
+        "alpha": float(entry["alpha"]),
+        "noise_params": entry["noise_params"],
+        "fit_seed": entry.get("fit_seed"),
+    }
+
+
+def _vb_record_to_entry(record):
+    """Convert one on-disk Variable Bleaching JSON record back to an in-memory entry.
+
+    Older single-run-schema records (no "results_records") are passed
+    through unchanged; the history tab handles them separately.
+    """
+    if "results_records" not in record:
+        return dict(record)
+    entry = dict(record)
+    entry["results_df"] = pd.DataFrame(record["results_records"])
+    del entry["results_records"]
+    return entry
+
+
+def load_variable_bleaching_history():
+    """Load all stored Variable Bleaching fit history entries from disk (returns [] if none exist yet)."""
+    return [_vb_record_to_entry(r) for r in _load_records(VARIABLE_BLEACH_HISTORY_FILE)]
+
+
+def append_variable_bleaching_entry(entry):
+    """Append one in-memory Variable Bleaching fit entry to its on-disk history file."""
+    records = _load_records(VARIABLE_BLEACH_HISTORY_FILE)
+    records.append(_vb_entry_to_record(entry))
+    _save_records(VARIABLE_BLEACH_HISTORY_FILE, records)
+
+
+def clear_variable_bleaching_history():
+    """Delete all stored Variable Bleaching fit history entries."""
+    _save_records(VARIABLE_BLEACH_HISTORY_FILE, [])
+
+
+def delete_variable_bleaching_entry(index):
+    """Delete the Variable Bleaching fit history entry at position `index` (0-based, oldest first)."""
+    records = _load_records(VARIABLE_BLEACH_HISTORY_FILE)
+    if 0 <= index < len(records):
+        del records[index]
+        _save_records(VARIABLE_BLEACH_HISTORY_FILE, records)

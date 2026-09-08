@@ -5,11 +5,21 @@ Only photobleaching and dilution act on the mature pool:
     dM/dt = -kb*M - kd*M = -b*M,   b = kb + kd
     dB/dt =  kb*M - kd*B
 
-with M(0) = M0. This has a closed-form solution M(t) = M0 * exp(-b*t).
+with M(0) = M0. This has a closed-form solution M(t) = M0 * exp(-b*t), so
+F(t) = alpha*M(t) = A*exp(-b*t) with A = alpha*M0.
+
+M0 and alpha are not individually identifiable from F(t) alone (only their
+product A = alpha*M0 is), so the least-squares fit below estimates b and A
+directly rather than kb/M0/alpha separately; M0 is fixed at a reference
+value of 1 and alpha is derived from A at evaluation time -- alpha itself is
+never reported, since it isn't identifiable on its own. Same convention as
+the Variable Bleaching tab's K = G*I0 parametrization.
 """
 
 import numpy as np
 from scipy.integrate import solve_ivp
+
+M0_REF = 1.0
 
 
 def model_bleach(t, y, params):
@@ -47,9 +57,10 @@ def analytical_F(t, A, kb, kd):
 # ---------------------------------------------------------
 
 def residuals_bleach(x, t, F_meas):
-    # kd is fixed at 0 (growth halted) rather than fitted; only M0, kb, and
-    # alpha are free parameters here.
-    M0, kb, alpha = x
-    params = {"kb": kb, "kd": 0.0, "alpha": alpha}
-    _, M, B, F = simulate_bleach(t, params, M0=M0, B0=0.0)
+    """x = [b, A] where b = kb + kd (kd fixed at 0) and A = alpha*M0 (the
+    only amplitude combination identifiable from F(t) alone)."""
+    b, A = x
+    alpha = A / M0_REF
+    params = {"kb": b, "kd": 0.0, "alpha": alpha}
+    _, M, B, F = simulate_bleach(t, params, M0=M0_REF, B0=0.0)
     return F - F_meas

@@ -116,7 +116,11 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
     """Render the histograms + summary table for one multi-start fit result.
 
     Shared by the Least Squares Fitting tab (right after a run) and the
-    History tab (replaying a stored past run).
+    History tab (replaying a stored past run). `derived_names` entries
+    already present in `param_names` are skipped (some fits, e.g. the
+    Bleaching Only tab's b/A fit, now fit the identifiable quantities
+    directly, leaving nothing further to derive) — the "Derived quantities"
+    section is omitted entirely when nothing is left after that filter.
     """
     n_converged = int(results_df["converged"].sum())
     n_total = len(results_df)
@@ -135,13 +139,15 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
     fig_raw = plot_histograms(plot_df, param_names, true_values, color="tab:blue")
     st.pyplot(fig_raw)
 
-    st.markdown("**Derived quantities across runs**")
-    fig_der = plot_histograms(plot_df, derived_names, true_values, color="tab:purple")
-    st.pyplot(fig_der)
+    extra_derived = [name for name in derived_names if name not in param_names]
+    if extra_derived:
+        st.markdown("**Derived quantities across runs**")
+        fig_der = plot_histograms(plot_df, extra_derived, true_values, color="tab:purple")
+        st.pyplot(fig_der)
 
     st.markdown("**Summary statistics across runs (mean, std, coefficient of variation)**")
     summary_rows = []
-    for name in param_names + derived_names:
+    for name in param_names + extra_derived:
         vals = plot_df[name].to_numpy(dtype=float)
         mean = float(np.mean(vals))
         std = float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0
@@ -162,7 +168,7 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
             "**Initial guess** it started from directly below."
         )
         detail_cols = (
-            ["run", "Type"] + param_names + derived_names + ["cost", "converged", "message", "nfev"]
+            ["run", "Type"] + param_names + extra_derived + ["cost", "converged", "message", "nfev"]
         )
         detail_rows = []
         for _, r in results_df.iterrows():
@@ -170,7 +176,7 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
                 "run": int(r["run"]),
                 "Type": "Fitted",
                 **{name: r[name] for name in param_names},
-                **{name: f"{r[name]:.6g}" for name in derived_names},
+                **{name: f"{r[name]:.6g}" for name in extra_derived},
                 "cost": f"{r['cost']:.6g}",
                 "converged": str(bool(r["converged"])),
                 "message": str(r["message"]),
@@ -180,7 +186,7 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
                 "run": int(r["run"]),
                 "Type": "Initial guess",
                 **{name: r[f"{name}_init"] for name in param_names},
-                **{name: "n/a" for name in derived_names},
+                **{name: "n/a" for name in extra_derived},
                 "cost": "n/a",
                 "converged": "n/a",
                 "message": "n/a",

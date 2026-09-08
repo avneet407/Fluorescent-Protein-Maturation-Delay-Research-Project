@@ -262,7 +262,7 @@ def render_bleaching_tab():
             st.pyplot(fig_syn_b)
 
         st.divider()
-        # Fits M0, kb, alpha (Bleaching_Only_Model.residuals_bleach) from
+        # Fits b and A directly (Bleaching_Only_Model.residuals_bleach) from
         # many randomized initial guesses against the synthetic data above.
         # kd is fixed at 0 (growth halted) rather than fitted.
         st.subheader("Multi-start least-squares fit")
@@ -271,13 +271,17 @@ def render_bleaching_tab():
             st.info("Generate synthetic data above to fit against.")
         else:
             st.markdown(
-                "Repeats a least-squares fit of M0, kb, and alpha to the "
-                "synthetic data above from many independently randomized "
-                "initial guesses, log-uniform over one decade centered on the "
-                "synthetic input parameters, to check convergence robustness "
-                "and parameter identifiability. kd is fixed at 0 (growth "
-                "halted) rather than fitted, so kb alone is the decay rate "
-                "b = kb + kd. alpha and M0 only enter as A = alpha * M0."
+                "Repeats a least-squares fit of b and A to the synthetic "
+                "data above from many independently randomized initial "
+                "guesses, log-uniform over one decade centered on the "
+                "synthetic input parameters, to check convergence "
+                "robustness. kd is fixed at 0 (growth halted) rather than "
+                "fitted, so b = kb directly. M0 and alpha are not "
+                "individually identifiable from F(t) alone (only their "
+                "product A = alpha\\*M0 is), so instead of fitting them "
+                "separately, the fit directly estimates b and A -- same "
+                "convention used in the Variable Bleaching tab and the "
+                "known bleaching pole fit below."
             )
 
             fit_col1_bleach, fit_col2_bleach = st.columns(2)
@@ -302,15 +306,16 @@ def render_bleaching_tab():
             multi_fit_button_bleach = st.button("Run Multi-Start Fit (N runs)", key="bleach_multi_fit_button")
 
             if multi_fit_button_bleach:
-                # kd is fixed at 0 in the fit itself (residuals_bleach); it's
-                # still reported below as a (constant) derived value so b and
-                # the summary table keep their usual shape.
-                param_names_bleach = ["M0", "kb", "alpha"]
-                centers_bleach = [
-                    bleach_synth_params["M0"], bleach_synth_params["kb"],
-                    bleach_synth_params["alpha"],
-                ]
-                bounds_bleach = ([0.0, 0.0, 0.1], [1e6, 5.0, 10.0])
+                # kd is fixed at 0 in the fit itself (residuals_bleach), not
+                # guessed. M0 and alpha are not individually identifiable
+                # from F(t) alone (only their product A = alpha*M0 is), so
+                # instead of fitting them separately, the fit directly
+                # estimates b and A — same convention as the Variable
+                # Bleaching tab's K = G*I0 parametrization.
+                param_names_bleach = ["b", "A"]
+                A_true_bleach = bleach_synth_params["alpha"] * bleach_synth_params["M0"]
+                centers_bleach = [bleach_synth_params["kb"], A_true_bleach]
+                bounds_bleach = ([0.0, 0.0], [5.0, 1e8])
 
                 with st.spinner(f"Running multi-start fit ({int(n_multi_runs_bleach)} runs)..."):
                     results_df_bleach = run_multi_start(
@@ -319,18 +324,11 @@ def render_bleaching_tab():
                         seed=multi_seed_bleach,
                     )
 
-                results_df_bleach["kd"] = 0.0
-                results_df_bleach["b"] = results_df_bleach["kb"] + results_df_bleach["kd"]
-                results_df_bleach["A"] = results_df_bleach["alpha"] * results_df_bleach["M0"]
-                derived_names_bleach = ["kd", "b", "A"]
+                derived_names_bleach = []
 
                 true_values_bleach = {
-                    "M0": bleach_synth_params["M0"],
-                    "kb": bleach_synth_params["kb"],
-                    "alpha": bleach_synth_params["alpha"],
-                    "kd": bleach_synth_params["kd"],
                     "b": bleach_synth_params["kb"] + bleach_synth_params["kd"],
-                    "A": bleach_synth_params["alpha"] * bleach_synth_params["M0"],
+                    "A": A_true_bleach,
                 }
 
                 st.session_state["bleach_multi_result"] = {
@@ -364,13 +362,15 @@ def render_bleaching_tab():
         "generated in the **Data** tab, treating b = kb + kd as fixed and "
         "known (e.g. estimated above from the bleaching-only multi-start "
         "fit) rather than estimated. kd is fixed at 0 (growth halted) "
-        "rather than fitted, so kb = b directly. Multi-start initial "
-        "guesses are still centered on the synthetic input parameters "
-        "(log-uniform, one decade span); since several of the raw fitted "
-        "parameters (I0, km/k1/k2, alpha) are not individually "
-        "identifiable on their own, only the identifiable derived "
-        "quantities are reported below, compared to their synthetic input "
-        "values."
+        "rather than fitted, so kb = b directly. I0 and alpha are not "
+        "individually identifiable from F(t) alone (only their product "
+        "with km/k1\\*k2 is), so instead of fitting them separately, the "
+        "fit directly estimates km (or k1, k2) and K = G\\*I0 = "
+        "alpha\\*km\\*I0 (G3\\*I0 for the 2-step model) -- the identifiable "
+        "pole and gain-numerator quantities, same convention used in the "
+        "Variable Bleaching tab. Multi-start initial guesses are still "
+        "centered on the synthetic input parameters (log-uniform, one "
+        "decade span)."
     )
 
     data_kb = st.session_state.get("current_data")
@@ -437,25 +437,30 @@ def render_bleaching_tab():
         multi_fit_button_kb = st.button("Run Multi-Start Fit (N runs)", key="known_b_multi_fit_button")
 
         if multi_fit_button_kb:
-            # kd is fixed at 0 in the fit itself (residuals_*_known_b); it's
-            # still reported below as a (constant) derived value.
+            # kd is fixed at 0 in the fit itself (residuals_*_known_b), not
+            # guessed. I0 and alpha are not individually identifiable from
+            # F(t) alone (only their product with km/k1*k2 is), so instead
+            # of fitting them separately, the fit directly estimates
+            # km/k1,k2 and K = G*I0 (G3*I0 for 2-step) — same convention as
+            # the Variable Bleaching tab's joint fit.
             fixed_kb = {"u": u_step_kb, "b": b_known}
 
             if fit_is_two_step_kb:
-                centers_kb = [
-                    synthetic_params_kb["I0"], synthetic_params_kb["k1"],
-                    synthetic_params_kb["k2"], synthetic_params_kb["alpha"],
-                ]
-                param_names_kb = ["I0", "k1", "k2", "alpha"]
-                bounds_kb = ([0.0, 0.0, 0.0, 0.1], [1e6, 5.0, 5.0, 10.0])
+                K_true_kb = (
+                    synthetic_params_kb["alpha"] * synthetic_params_kb["k1"]
+                    * synthetic_params_kb["k2"] * synthetic_params_kb["I0"]
+                )
+                centers_kb = [synthetic_params_kb["k1"], synthetic_params_kb["k2"], K_true_kb]
+                param_names_kb = ["k1", "k2", "K"]
+                bounds_kb = ([0.0, 0.0, 0.0], [5.0, 5.0, 1e8])
                 residual_fn_kb = residuals_2step_known_b
             else:
-                centers_kb = [
-                    synthetic_params_kb["I0"], synthetic_params_kb["km"],
-                    synthetic_params_kb["alpha"],
-                ]
-                param_names_kb = ["I0", "km", "alpha"]
-                bounds_kb = ([0.0, 0.0, 0.1], [1e6, 5.0, 10.0])
+                K_true_kb = (
+                    synthetic_params_kb["alpha"] * synthetic_params_kb["km"] * synthetic_params_kb["I0"]
+                )
+                centers_kb = [synthetic_params_kb["km"], K_true_kb]
+                param_names_kb = ["km", "K"]
+                bounds_kb = ([0.0, 0.0], [5.0, 1e8])
                 residual_fn_kb = residuals_1step_known_b
 
             with st.spinner(f"Running multi-start fit ({int(n_multi_runs_kb)} runs)..."):
@@ -465,31 +470,22 @@ def render_bleaching_tab():
                     seed=multi_seed_kb,
                 )
 
-            results_df_kb["kd"] = 0.0
             if fit_is_two_step_kb:
-                results_df_kb["a"] = results_df_kb["k1"] + results_df_kb["kd"]
-                results_df_kb["c"] = results_df_kb["k2"] + results_df_kb["kd"]
-                results_df_kb["G3"] = results_df_kb["alpha"] * results_df_kb["k1"] * results_df_kb["k2"]
-                results_df_kb["G3*I0"] = results_df_kb["G3"] * results_df_kb["I0"]
-                derived_names_kb = ["kd", "a", "c", "G3", "G3*I0"]
+                results_df_kb["a"] = results_df_kb["k1"]  # kd fixed at 0
+                results_df_kb["c"] = results_df_kb["k2"]  # kd fixed at 0
+                derived_names_kb = ["a", "c", "K"]
             else:
-                results_df_kb["a"] = results_df_kb["km"] + results_df_kb["kd"]
-                results_df_kb["G"] = results_df_kb["alpha"] * results_df_kb["km"]
-                results_df_kb["G*I0"] = results_df_kb["G"] * results_df_kb["I0"]
-                derived_names_kb = ["kd", "a", "G", "G*I0"]
+                results_df_kb["a"] = results_df_kb["km"]  # kd fixed at 0
+                derived_names_kb = ["a", "K"]
 
-            true_values_kb = {"kd": synthetic_params_kb["kd"]}
+            true_values_kb = {}
             if fit_is_two_step_kb:
                 true_values_kb["a"] = synthetic_params_kb["k1"] + synthetic_params_kb["kd"]
                 true_values_kb["c"] = synthetic_params_kb["k2"] + synthetic_params_kb["kd"]
-                true_values_kb["G3"] = (
-                    synthetic_params_kb["alpha"] * synthetic_params_kb["k1"] * synthetic_params_kb["k2"]
-                )
-                true_values_kb["G3*I0"] = true_values_kb["G3"] * synthetic_params_kb["I0"]
+                true_values_kb["K"] = K_true_kb
             else:
                 true_values_kb["a"] = synthetic_params_kb["km"] + synthetic_params_kb["kd"]
-                true_values_kb["G"] = synthetic_params_kb["alpha"] * synthetic_params_kb["km"]
-                true_values_kb["G*I0"] = true_values_kb["G"] * synthetic_params_kb["I0"]
+                true_values_kb["K"] = K_true_kb
 
             st.session_state["known_b_multi_result"] = {
                 "results_df": results_df_kb,
@@ -560,14 +556,15 @@ def render_bleaching_tab():
                 with st.expander("All multi-start fit results (raw table)"):
                     st.markdown(
                         "Each run shows two rows: its final **Fitted** values, and the "
-                        "**Initial guess** it started from directly below. Raw fitted "
-                        "parameters (I0, km/k1/k2, alpha) are included here for "
-                        "inspection even though they are not individually identifiable "
-                        "on their own; b is fixed at the value entered above, and kd is "
+                        "**Initial guess** it started from directly below. km/k1/k2 and "
+                        "K = G\\*I0 / G3\\*I0 are fit directly (I0 and alpha aren't fit "
+                        "individually, since only their product with km/k1\\*k2 is "
+                        "identifiable); b is fixed at the value entered above, and kd is "
                         "fixed at 0 (growth halted) — neither is fitted."
                     )
+                    extra_derived_kb = [name for name in derived_names_kb if name not in param_names_kb]
                     detail_cols_kb = (
-                        ["run", "Type"] + param_names_kb + derived_names_kb
+                        ["run", "Type"] + param_names_kb + extra_derived_kb
                         + ["cost", "converged", "message", "nfev"]
                     )
                     detail_rows_kb = []
@@ -576,7 +573,7 @@ def render_bleaching_tab():
                             "run": int(r["run"]),
                             "Type": "Fitted",
                             **{name: r[name] for name in param_names_kb},
-                            **{name: f"{r[name]:.6g}" for name in derived_names_kb},
+                            **{name: f"{r[name]:.6g}" for name in extra_derived_kb},
                             "cost": f"{r['cost']:.6g}",
                             "converged": str(bool(r["converged"])),
                             "message": str(r["message"]),
@@ -586,7 +583,7 @@ def render_bleaching_tab():
                             "run": int(r["run"]),
                             "Type": "Initial guess",
                             **{name: r[f"{name}_init"] for name in param_names_kb},
-                            **{name: "n/a" for name in derived_names_kb},
+                            **{name: "n/a" for name in extra_derived_kb},
                             "cost": "n/a",
                             "converged": "n/a",
                             "message": "n/a",

@@ -29,6 +29,7 @@ from app.tab_data import render_data_tab
 from app.tab_bleaching import render_bleaching_tab
 from app.tab_bleaching_history import render_bleaching_history_tab
 from app.tab_variable_bleaching import render_variable_bleaching_tab
+from app.tab_variable_bleaching_history import render_variable_bleaching_history_tab
 from app.tab_fitting import render_fitting_tab
 from app.tab_profile_likelihood import render_profile_likelihood_tab
 from app.tab_bode import render_bode_tab
@@ -46,7 +47,9 @@ from app.tab_profile_history import render_profile_history_tab
 #                              Bode-plot both against the synthetic input
 #   Bleaching Fit History    - saved runs from the tab above
 #   Variable Bleaching       - kd fixed at 0; overlay F(t) across several kb
-#                              values with km/alpha/etc. held fixed
+#                              values with km/alpha/etc. held fixed; joint
+#                              least-squares fit across traces (shared km)
+#   Variable Bleaching History - saved joint fit runs from the tab above
 #   Least Squares Fitting    - single and multi-start fits of the full model
 #   Profile Likelihood       - parameter identifiability sweeps (1D and 2D)
 #   Bode Plot                - frequency response of the full model for
@@ -58,13 +61,13 @@ st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
 st.title("Fluorescent Protein Maturation Delay Model")
 
 (
-    sim_tab, upload_tab, bleach_tab, bleach_history_tab, variable_bleach_tab, fit_tab,
-    profile_tab, bode_tab, ms_history_tab, pl_history_tab,
+    sim_tab, upload_tab, bleach_tab, bleach_history_tab, variable_bleach_tab,
+    variable_bleach_history_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab,
 ) = st.tabs(
     [
         "Simulation", "Data", "Bleaching Only Simulation", "Bleaching Fit History",
-        "Variable Bleaching", "Least Squares Fitting", "Profile Likelihood", "Bode Plot",
-        "Multi-Start History", "Profile Likelihood History",
+        "Variable Bleaching", "Variable Bleaching History", "Least Squares Fitting",
+        "Profile Likelihood", "Bode Plot", "Multi-Start History", "Profile Likelihood History",
     ]
 )
 
@@ -82,6 +85,9 @@ with bleach_history_tab:
 
 with variable_bleach_tab:
     render_variable_bleaching_tab()
+
+with variable_bleach_history_tab:
+    render_variable_bleaching_history_tab()
 
 with fit_tab:
     render_fitting_tab()
