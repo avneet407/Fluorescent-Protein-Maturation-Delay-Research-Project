@@ -356,7 +356,7 @@ def render_variable_bleaching_tab():
     fit_col1, fit_col2 = st.columns(2)
     with fit_col1:
         n_multi_runs_vb = st.number_input(
-            "Number of runs (N)", min_value=2, value=10, step=1, key="vb_n_multi_runs",
+            "Number of runs (N)", min_value=1, value=10, step=1, key="vb_n_multi_runs",
             help="Fewer runs than other multi-start fits in this app by default, since "
                  "each run here jointly simulates every trace above.",
         )

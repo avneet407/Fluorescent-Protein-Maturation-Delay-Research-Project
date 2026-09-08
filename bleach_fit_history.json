@@ -22994,5 +22994,586 @@
       ]
     },
     "known_b_bode": null
+  },
+  {
+    "timestamp": "2026-09-08 15:26:30",
+    "bleach_only": {
+      "n_total": 10,
+      "n_converged": 10,
+      "param_names": [
+        "b",
+        "A"
+      ],
+      "derived_names": [],
+      "true_values": {
+        "b": 0.02,
+        "A": 130.0
+      },
+      "extra_info": {},
+      "results_records": [
+        {
+          "b_init": 0.0123931775,
+          "b": 0.0197199277,
+          "A_init": 163.1802676524,
+          "A": 129.870199991,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 7,
+          "run": 0
+        },
+        {
+          "b_init": 0.0155620491,
+          "b": 0.0197199278,
+          "A_init": 224.8231304868,
+          "A": 129.8702001774,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "`xtol` termination condition is satisfied.",
+          "nfev": 8,
+          "run": 1
+        },
+        {
+          "b_init": 0.0088935679,
+          "b": 0.0197199278,
+          "A_init": 399.1692164234,
+          "A": 129.8702000196,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 2
+        },
+        {
+          "b_init": 0.0404698925,
+          "b": 0.0197199278,
+          "A_init": 75.6904976497,
+          "A": 129.8702000582,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 3
+        },
+        {
+          "b_init": 0.0306950601,
+          "b": 0.0197199277,
+          "A_init": 284.3134782895,
+          "A": 129.8701999937,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 8,
+          "run": 4
+        },
+        {
+          "b_init": 0.0081051042,
+          "b": 0.0197199277,
+          "A_init": 57.0010112203,
+          "A": 129.8701999863,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 6,
+          "run": 5
+        },
+        {
+          "b_init": 0.014586843,
+          "b": 0.0197199277,
+          "A_init": 195.2217345019,
+          "A": 129.8702000092,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 7,
+          "run": 6
+        },
+        {
+          "b_init": 0.0105189722,
+          "b": 0.0197199277,
+          "A_init": 56.7548295579,
+          "A": 129.8701999887,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 6,
+          "run": 7
+        },
+        {
+          "b_init": 0.0079896953,
+          "b": 0.0197199277,
+          "A_init": 205.8567788832,
+          "A": 129.8701999916,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 8,
+          "run": 8
+        },
+        {
+          "b_init": 0.0356496539,
+          "b": 0.0197199277,
+          "A_init": 80.6665159555,
+          "A": 129.8702000032,
+          "cost": 14.3233683558,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 9
+        }
+      ]
+    },
+    "bleach_bode": null,
+    "known_b": {
+      "n_total": 10,
+      "n_converged": 10,
+      "param_names": [
+        "km",
+        "K"
+      ],
+      "derived_names": [
+        "a",
+        "K"
+      ],
+      "true_values": {
+        "a": 0.15,
+        "K": 19.5
+      },
+      "extra_info": {
+        "fit_is_two_step": false,
+        "b_known": 0.0197,
+        "u_step": 0.0
+      },
+      "results_records": [
+        {
+          "km_init": 0.0635708138,
+          "km": 0.1539239541,
+          "K_init": 15.564098346,
+          "K": 19.8686365838,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 8,
+          "run": 0,
+          "a": 0.1539239541
+        },
+        {
+          "km_init": 0.2729710192,
+          "km": 0.1539239553,
+          "K_init": 23.3262949668,
+          "K": 19.8686367245,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 8,
+          "run": 1,
+          "a": 0.1539239553
+        },
+        {
+          "km_init": 0.2979289529,
+          "km": 0.1539239536,
+          "K_init": 20.2314663842,
+          "K": 19.8686365226,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 2,
+          "a": 0.1539239536
+        },
+        {
+          "km_init": 0.2168115952,
+          "km": 0.1539239537,
+          "K_init": 7.6217417653,
+          "K": 19.868636541,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 8,
+          "run": 3,
+          "a": 0.1539239537
+        },
+        {
+          "km_init": 0.0903565776,
+          "km": 0.1539239535,
+          "K_init": 25.1300499909,
+          "K": 19.8686365215,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 8,
+          "run": 4,
+          "a": 0.1539239535
+        },
+        {
+          "km_init": 0.1398841645,
+          "km": 0.153923952,
+          "K_init": 22.1115585076,
+          "K": 19.8686363402,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 6,
+          "run": 5,
+          "a": 0.153923952
+        },
+        {
+          "km_init": 0.0593834067,
+          "km": 0.1539239537,
+          "K_init": 31.1902896583,
+          "K": 19.8686365452,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 9,
+          "run": 6,
+          "a": 0.1539239537
+        },
+        {
+          "km_init": 0.4467814499,
+          "km": 0.1539239518,
+          "K_init": 6.9657395655,
+          "K": 19.8686363129,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 7,
+          "a": 0.1539239518
+        },
+        {
+          "km_init": 0.0823422768,
+          "km": 0.153923954,
+          "K_init": 11.1050860259,
+          "K": 19.8686365791,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 7,
+          "run": 8,
+          "a": 0.153923954
+        },
+        {
+          "km_init": 0.2303278788,
+          "km": 0.1539239514,
+          "K_init": 58.5371756714,
+          "K": 19.8686362644,
+          "cost": 15.4068500836,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 9,
+          "a": 0.1539239514
+        }
+      ]
+    },
+    "known_b_bode": null
+  },
+  {
+    "timestamp": "2026-09-08 16:03:19",
+    "bleach_only": {
+      "n_total": 10,
+      "n_converged": 10,
+      "param_names": [
+        "b",
+        "A"
+      ],
+      "derived_names": [],
+      "true_values": {
+        "b": 0.02,
+        "A": 130.0
+      },
+      "extra_info": {},
+      "results_records": [
+        {
+          "b_init": 0.0520730007,
+          "b": 0.0203601488,
+          "A_init": 132.484039783,
+          "A": 129.3923667246,
+          "cost": 11.5804708474,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 0
+        },
+        {
+          "b_init": 0.0321157422,
+          "b": 0.0203601488,
+          "A_init": 64.8278056094,
+          "A": 129.3923666946,
+          "cost": 11.5804708473,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 1
+        },
+        {
+          "b_init": 0.0601259478,
+          "b": 0.0203601488,
+          "A_init": 41.2792962904,
+          "A": 129.3923667036,
+          "cost": 11.5804708474,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 10,
+          "run": 2
+        },
+        {
+          "b_init": 0.0227214169,
+          "b": 0.0203601488,
+          "A_init": 69.6555642489,
+          "A": 129.3923666937,
+          "cost": 11.5804708474,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 7,
+          "run": 3
+        },
+        {
+          "b_init": 0.0081135638,
+          "b": 0.0203601487,
+          "A_init": 113.5608370645,
+          "A": 129.3923666755,
+          "cost": 11.5804708473,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 6,
+          "run": 4
+        },
+        {
+          "b_init": 0.0107020212,
+          "b": 0.0203601487,
+          "A_init": 160.6512231938,
+          "A": 129.3923666812,
+          "cost": 11.5804708473,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 7,
+          "run": 5
+        },
+        {
+          "b_init": 0.0239257894,
+          "b": 0.0203601488,
+          "A_init": 325.8118538497,
+          "A": 129.3923667764,
+          "cost": 11.5804708474,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 8,
+          "run": 6
+        },
+        {
+          "b_init": 0.0185548162,
+          "b": 0.0203601487,
+          "A_init": 78.6470897332,
+          "A": 129.3923666073,
+          "cost": 11.5804708474,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 5,
+          "run": 7
+        },
+        {
+          "b_init": 0.017260039,
+          "b": 0.0203601489,
+          "A_init": 323.8144181555,
+          "A": 129.3923670403,
+          "cost": 11.5804708473,
+          "converged": true,
+          "message": "`xtol` termination condition is satisfied.",
+          "nfev": 9,
+          "run": 8
+        },
+        {
+          "b_init": 0.0197967496,
+          "b": 0.0203601487,
+          "A_init": 351.5983109562,
+          "A": 129.3923666846,
+          "cost": 11.5804708473,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 9,
+          "run": 9
+        }
+      ]
+    },
+    "bleach_bode": null,
+    "known_b": {
+      "n_total": 10,
+      "n_converged": 10,
+      "param_names": [
+        "k1",
+        "k2",
+        "K"
+      ],
+      "derived_names": [
+        "a",
+        "c",
+        "K"
+      ],
+      "true_values": {
+        "a": 0.2,
+        "c": 0.1,
+        "K": 2.6
+      },
+      "extra_info": {
+        "fit_is_two_step": true,
+        "b_known": 0.0204,
+        "u_step": 0.0
+      },
+      "results_records": [
+        {
+          "k1_init": 0.2121856764,
+          "k1": 0.1985110385,
+          "k2_init": 0.0688741835,
+          "k2": 0.10193564,
+          "K_init": 7.9156178572,
+          "K": 2.6147207623,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 19,
+          "run": 0,
+          "a": 0.1985110385,
+          "c": 0.10193564
+        },
+        {
+          "k1_init": 0.0835357714,
+          "k1": 0.1019396745,
+          "k2_init": 0.161742958,
+          "k2": 0.1985017837,
+          "K_init": 5.1628936051,
+          "K": 2.6146786321,
+          "cost": 34.6961811232,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 15,
+          "run": 1,
+          "a": 0.1019396745,
+          "c": 0.1985017837
+        },
+        {
+          "k1_init": 0.085343163,
+          "k1": 0.1985110373,
+          "k2_init": 0.0854099852,
+          "k2": 0.1019356403,
+          "K_init": 1.2929536176,
+          "K": 2.6147207527,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 28,
+          "run": 2,
+          "a": 0.1985110373,
+          "c": 0.1019356403
+        },
+        {
+          "k1_init": 0.2767480417,
+          "k1": 0.1985110396,
+          "k2_init": 0.0325346335,
+          "k2": 0.1019356397,
+          "K_init": 3.0140600613,
+          "K": 2.6147207691,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 11,
+          "run": 3,
+          "a": 0.1985110396,
+          "c": 0.1019356397
+        },
+        {
+          "k1_init": 0.473356471,
+          "k1": 0.198511041,
+          "k2_init": 0.1239324371,
+          "k2": 0.1019356392,
+          "K_init": 1.6538410185,
+          "K": 2.6147207749,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 18,
+          "run": 4,
+          "a": 0.198511041,
+          "c": 0.1019356392
+        },
+        {
+          "k1_init": 0.1496430916,
+          "k1": 0.1019396743,
+          "k2_init": 0.1938048807,
+          "k2": 0.1985017843,
+          "K_init": 0.9131614218,
+          "K": 2.6146786346,
+          "cost": 34.6961811232,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 21,
+          "run": 5,
+          "a": 0.1019396743,
+          "c": 0.1985017843
+        },
+        {
+          "k1_init": 0.2919422482,
+          "k1": 0.1985110403,
+          "k2_init": 0.0330573304,
+          "k2": 0.1019356394,
+          "K_init": 2.246827239,
+          "K": 2.6147207718,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 14,
+          "run": 6,
+          "a": 0.1985110403,
+          "c": 0.1019356394
+        },
+        {
+          "k1_init": 0.1201468717,
+          "k1": 0.1985110359,
+          "k2_init": 0.064818153,
+          "k2": 0.1019356411,
+          "K_init": 6.2862070739,
+          "K": 2.614720755,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 16,
+          "run": 7,
+          "a": 0.1985110359,
+          "c": 0.1019356411
+        },
+        {
+          "k1_init": 0.513091419,
+          "k1": 0.1985110387,
+          "k2_init": 0.0793305271,
+          "k2": 0.1019356399,
+          "K_init": 7.7351010669,
+          "K": 2.6147207637,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "Both `ftol` and `xtol` termination conditions are satisfied.",
+          "nfev": 17,
+          "run": 8,
+          "a": 0.1985110387,
+          "c": 0.1019356399
+        },
+        {
+          "k1_init": 0.0943744398,
+          "k1": 0.1985110389,
+          "k2_init": 0.0437568402,
+          "k2": 0.1019356399,
+          "K_init": 2.5307438655,
+          "K": 2.6147207645,
+          "cost": 34.7190474646,
+          "converged": true,
+          "message": "`ftol` termination condition is satisfied.",
+          "nfev": 13,
+          "run": 9,
+          "a": 0.1985110389,
+          "c": 0.1019356399
+        }
+      ]
+    },
+    "known_b_bode": null
   }
 ]

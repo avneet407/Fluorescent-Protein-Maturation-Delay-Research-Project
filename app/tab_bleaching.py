@@ -287,7 +287,7 @@ def render_bleaching_tab():
             fit_col1_bleach, fit_col2_bleach = st.columns(2)
             with fit_col1_bleach:
                 n_multi_runs_bleach = st.number_input(
-                    "Number of runs (N)", min_value=2, value=30, step=1, key="bleach_n_multi_runs",
+                    "Number of runs (N)", min_value=1, value=30, step=1, key="bleach_n_multi_runs",
                 )
             with fit_col2_bleach:
                 include_nonconverged_bleach = st.checkbox(
@@ -418,7 +418,7 @@ def render_bleaching_tab():
         multi_col1_kb, multi_col2_kb = st.columns(2)
         with multi_col1_kb:
             n_multi_runs_kb = st.number_input(
-                "Number of runs (N)", min_value=2, value=30, step=1, key="known_b_n_multi_runs",
+                "Number of runs (N)", min_value=1, value=30, step=1, key="known_b_n_multi_runs",
             )
         with multi_col2_kb:
             include_nonconverged_kb = st.checkbox(
