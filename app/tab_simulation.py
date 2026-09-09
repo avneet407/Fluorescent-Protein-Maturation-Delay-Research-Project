@@ -8,6 +8,18 @@ from scipy.integrate import solve_ivp
 from Maturation_Models import model_1step, model_2step
 
 
+# Fixed per-species colors so I/M/B/F (and X, 2-step only) always mean the
+# same thing across the 1-step and 2-step plots, instead of shifting with
+# matplotlib's default color cycle whenever X is or isn't present.
+SPECIES_COLORS = {
+    "I": "tab:blue",
+    "X": "tab:orange",
+    "M": "tab:green",
+    "B": "tab:purple",
+    "F": "red",
+}
+
+
 # --- Simulation tab: run the ODE model with live parameters --------------
 # Returns a `sim_state` dict (`is_two_step`, `I0`, `km`/`k1`/`k2`, `kb`, `kd`,
 # `alpha`, etc.) for the Data and Bode Plot tabs to use as their "current
@@ -172,17 +184,19 @@ def render_simulation_tab():
         fig, ax = plt.subplots(figsize=(9, 5))
 
         if sim_result["is_two_step"]:
-            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)")
-            ax.plot(sim_result["t"], sim_result["X"], label="X (intermediate)")
-            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)")
-            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)")
-            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)", linewidth=2)
+            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)", color=SPECIES_COLORS["I"])
+            ax.plot(sim_result["t"], sim_result["X"], label="X (intermediate)", color=SPECIES_COLORS["X"])
+            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)", color=SPECIES_COLORS["M"])
+            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)", color=SPECIES_COLORS["B"])
+            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)",
+                    linewidth=2, color=SPECIES_COLORS["F"])
             ax.set_title("2-step maturation model")
         else:
-            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)")
-            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)")
-            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)")
-            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)", linewidth=2)
+            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)", color=SPECIES_COLORS["I"])
+            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)", color=SPECIES_COLORS["M"])
+            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)", color=SPECIES_COLORS["B"])
+            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)",
+                    linewidth=2, color=SPECIES_COLORS["F"])
             ax.set_title("1-step maturation model")
 
         ax.set_xlabel("Time (sec)")
