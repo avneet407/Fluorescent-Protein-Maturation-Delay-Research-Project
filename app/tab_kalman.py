@@ -1,10 +1,13 @@
 # --- Kalman Filter tab: reconstruct I/(X)/M/u from a noisy fluorescence trace
 # Ports Kalman_Filter/1-step_Kalman_Filter.py and 2-step_Kalman_Filter.py:
-# user enters calibrated rate constants (e.g. obtained from Least Squares
-# Fitting), alpha, the measurement interval dt, process noise, and
-# measurement noise sigma_F, plus the synthetic sinusoidal gene-expression
-# signal used to generate a trace to filter. Every run is saved to the
-# Kalman Filter History tab (kalman_history.json).
+# user enters calibrated ("estimated") rate constants (e.g. obtained from
+# Least Squares Fitting), alpha, process noise, and the filter's assumed
+# measurement noise sigma_F. Filters the noisy trace generated in the
+# **Synthetic Gene Expression** tab (its own, possibly different, "true"
+# rate constants and u(t) formula produce that trace); this tab's plots
+# compare the filter's reconstruction (from the estimated rate constants
+# here) against that tab's ground truth. Every run is saved to the Kalman
+# Filter History tab (kalman_history.json).
 
 from datetime import datetime
 
@@ -18,21 +21,34 @@ from app.shared import render_kalman_result
 
 def render_kalman_tab():
     st.markdown(
-        "Runs a Kalman filter over a synthetic noisy fluorescence trace to "
-        "reconstruct the immature/(intermediate)/mature protein pools and "
-        "the underlying gene expression rate u(t), given calibrated rate "
-        "constants (e.g. from **Least Squares Fitting**). u is modelled as a "
-        "random walk driven by process noise `qu`, not fit directly -- its "
-        "reconstructed trajectory is the Kalman filter's main output."
+        "Runs a Kalman filter over the noisy fluorescence trace generated in "
+        "the **Synthetic Gene Expression** tab, to reconstruct the "
+        "immature/(intermediate)/mature protein pools and the underlying "
+        "gene expression rate u(t), given *estimated* rate constants (e.g. "
+        "from **Least Squares Fitting**) -- which may differ from that "
+        "tab's *true* rate constants used to generate the trace. u is "
+        "modelled as a random walk driven by process noise `qu`, not fit "
+        "directly -- its reconstructed trajectory is the Kalman filter's "
+        "main output."
     )
 
-    model_choice = st.radio(
-        "Maturation model", options=["1-step (I -> M)", "2-step (I -> X -> M)"],
-        horizontal=True, key="kalman_model",
-    )
-    is_two_step = model_choice.startswith("2")
+    synth = st.session_state.get("synthetic_expression_result")
+    if synth is None:
+        st.info(
+            "Generate a noisy trace in the **Synthetic Gene Expression** "
+            "tab first (in this section, above this one)."
+        )
+        return
 
-    st.subheader("Calibrated rate constants")
+    is_two_step = synth["is_two_step"]
+    st.caption(
+        f"Filtering the {'2-step' if is_two_step else '1-step'} trace "
+        f"generated in **Synthetic Gene Expression** "
+        f"(n_steps={synth['n_steps']}, dt={synth['dt']:.4g}, "
+        f"u(t) = `{synth['u_expr']}`)."
+    )
+
+    st.subheader("Estimated rate constants (e.g. from Least Squares Fitting)")
     rc_cols = st.columns(4)
     with rc_cols[0]:
         if is_two_step:
@@ -68,25 +84,13 @@ def render_kalman_tab():
         key="kalman_alpha",
     )
 
-    st.subheader("Measurement timing and noise")
-    noise_cols = st.columns(4)
-    with noise_cols[0]:
-        dt = st.number_input(
-            "dt - time between measurements", min_value=1e-6, value=5.0, step=0.5,
-            key="kalman_dt",
-        )
-    with noise_cols[1]:
-        n_steps = st.number_input(
-            "n_steps - number of measurements", min_value=2, value=60, step=1,
-            key="kalman_n_steps",
-        )
-    with noise_cols[2]:
-        sigma_F = st.number_input(
-            "sigma_F - measurement noise std dev", min_value=0.0, value=5.0, step=0.5,
-            key="kalman_sigma_F",
-        )
-    with noise_cols[3]:
-        st.write("")
+    sigma_F = st.number_input(
+        "sigma_F - assumed measurement noise std dev", min_value=0.0, value=float(synth["sigma_F"]), step=0.5,
+        help="The filter's own assumption about measurement noise (used to build R). "
+             "Defaults to the Synthetic Gene Expression tab's true value, but can be "
+             "changed to explore a mis-specified filter.",
+        key="kalman_sigma_F",
+    )
 
     st.subheader("Process noise (diagonal of Qc)")
     if is_two_step:
@@ -118,49 +122,39 @@ def render_kalman_tab():
                      "true trajectory are treated as statistically unlikely.",
             )
 
-    st.subheader("Synthetic gene expression signal (to generate the trace to filter)")
-    st.caption(
-        "true_u(t) = u_base + u_amp * sin(2*pi * t / (n_steps*dt) * u_freq_cycles). "
-        "Only used to generate the synthetic ground truth and noisy measurements below "
-        "-- the filter itself never sees true_u."
-    )
-    u_cols = st.columns(3)
-    with u_cols[0]:
-        u_base = st.number_input("u_base", value=5.0, step=0.5, key="kalman_u_base")
-    with u_cols[1]:
-        u_amp = st.number_input("u_amp", value=3.0, step=0.5, key="kalman_u_amp")
-    with u_cols[2]:
-        u_freq_cycles = st.number_input("u_freq_cycles", value=2.0, step=0.5, key="kalman_u_freq")
-
-    use_seed = st.checkbox("Fix random seed (reproducible noise)", value=False, key="kalman_use_seed")
-    seed = None
-    if use_seed:
-        seed = int(st.number_input("Random seed", min_value=0, value=0, step=1, key="kalman_seed_val"))
-
     run_button = st.button("Run Kalman Filter", type="primary", key="kalman_run")
 
     if run_button:
         if is_two_step:
             params = {
                 "km1": km1, "km2": km2, "kb": kb, "kd": kd, "alpha": alpha,
-                "dt": dt, "n_steps": n_steps, "qI": qI, "qX": qX, "qM": qM, "qu": qu,
-                "sigma_F": sigma_F, "u_base": u_base, "u_amp": u_amp,
-                "u_freq_cycles": u_freq_cycles, "seed": seed,
+                "dt": synth["dt"], "qI": qI, "qX": qX, "qM": qM, "qu": qu, "sigma_F": sigma_F,
             }
         else:
             params = {
                 "km": km, "kb": kb, "kd": kd, "alpha": alpha,
-                "dt": dt, "n_steps": n_steps, "qI": qI, "qM": qM, "qu": qu,
-                "sigma_F": sigma_F, "u_base": u_base, "u_amp": u_amp,
-                "u_freq_cycles": u_freq_cycles, "seed": seed,
+                "dt": synth["dt"], "qI": qI, "qM": qM, "qu": qu, "sigma_F": sigma_F,
             }
 
         try:
             with st.spinner("Running Kalman filter..."):
-                result = run_kalman_2step(params) if is_two_step else run_kalman_1step(params)
+                filt = (
+                    run_kalman_2step(synth["z_n"], params) if is_two_step
+                    else run_kalman_1step(synth["z_n"], params)
+                )
         except ValueError as e:
             st.error(str(e))
         else:
+            result = {
+                "is_two_step": is_two_step,
+                "t": synth["t"], "z_n": synth["z_n"],
+                "true_I": synth["true_I"], "true_M": synth["true_M"], "true_u": synth["true_u"],
+                "alpha_true": synth["alpha"], "alpha_est": alpha,
+                **filt,
+            }
+            if is_two_step:
+                result["true_X"] = synth["true_X"]
+
             st.session_state["kalman_result"] = result
             append_kalman_entry({
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

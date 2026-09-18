@@ -6,11 +6,12 @@ from scipy.integrate import solve_ivp
 def model_1step(t, y, params):
     I, M, B = y
     u = params["u"]
+    u_t = u(t) if callable(u) else u
     km = params["km"]
     kb = params["kb"]
     kd = params["kd"]
 
-    dIdt = u - km * I - kd * I
+    dIdt = u_t - km * I - kd * I
     dMdt = km * I - kb * M - kd * M
     dBdt = kb * M - kd * B
     return [dIdt, dMdt, dBdt]
@@ -19,12 +20,13 @@ def model_1step(t, y, params):
 def model_2step(t, y, params):
     I, X, M, B = y
     u = params["u"]
+    u_t = u(t) if callable(u) else u
     k1 = params["k1"]
     k2 = params["k2"]
     kb = params["kb"]
     kd = params["kd"]
 
-    dIdt = u - k1 * I - kd * I
+    dIdt = u_t - k1 * I - kd * I
     dXdt = k1 * I - k2 * X - kd * X
     dMdt = k2 * X - kb * M - kd * M
     dBdt = kb * M - kd * B

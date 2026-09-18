@@ -9,39 +9,61 @@ independently.
 
 ## streamlit_app.py
 
-Thin Streamlit entry point. Sets page config/title, imports one `render_*`
-function per tab from `app/`, creates the tab strip via `st.tabs(...)`, and
-calls each tab's render function inside its `with <tab>:` block. The
-Simulation tab's return value (`sim_state`) is passed into the Data tab
-since it needs the Simulation tab's current settings as defaults; every
-other tab communicates purely via `st.session_state`. Holds no model logic
-of its own.
+Thin Streamlit entry point. Sets page config/title, builds one `st.Page`
+per tab wrapping a `render_*` function from `app/` (each given an explicit
+`url_path`, since `st.Page` otherwise infers the URL pathname from the
+wrapper callable's `__name__` — every page here is wrapped by the same
+`_page()` helper, so without an explicit `url_path` they'd all collide on
+the same inferred pathname), and groups them into a sidebar
+`st.navigation(...)` with two sections, **Parameter Identification** and
+**Kalman Filter** (the sidebar's own section headers already separate the
+two areas, so there's no separate Home page; **Simulation** is the default
+landing page). `nav.run()` executes
+only the current page's function each rerun — unlike the old single-page
+tab-strip layout, where every tab's code ran on every rerun regardless of
+which was visually selected. Because of that, the Simulation page's return
+value (`sim_state`) can no longer be passed directly to the Data page in
+the same run; instead `_simulation_page()` stashes it in
+`st.session_state["sim_state"]`, and `_data_page()` reads it back (showing
+an info message instead if the Simulation page hasn't been visited yet this
+session). Every other page communicates purely via `st.session_state`, same
+as before. Holds no model logic of its own.
 
-**Tabs, in registration order:**
+**Pages, grouped as registered:**
 
-1. **Simulation** (`app.tab_simulation`) — run the full maturation model,
-   set live params.
-2. **Data** (`app.tab_data`) — upload/generate the fluorescence trace to
-   fit.
-3. **Bleaching Only Simulation** (`app.tab_bleaching`) — pure
-   photobleaching-decay fit, plus a known-bleaching-pole fit of the full
-   model.
-4. **Bleaching Fit History** (`app.tab_bleaching_history`) — saved runs
-   from tab 3.
-5. **Variable Bleaching** (`app.tab_variable_bleaching`) — overlay F(t)
-   across several `kb` values, joint least-squares fit with shared `km`.
-6. **Variable Bleaching History** (`app.tab_variable_bleaching_history`) —
-   saved joint fit runs from tab 5.
-7. **Least Squares Fitting** (`app.tab_fitting`) — single and multi-start
-   fits of the full model.
-8. **Profile Likelihood** (`app.tab_profile_likelihood`) — parameter
-   identifiability sweeps (1D and 2D).
-9. **Bode Plot** (`app.tab_bode`) — frequency response for user-entered
-   parameter sets.
-10. **Multi-Start History** (`app.tab_multistart_history`) — saved
-    multi-start fit runs from tab 7.
-11. **Profile Likelihood History** (`app.tab_profile_history`) — saved
-    profile likelihood runs from tab 8.
+- **Parameter Identification**:
+  1. **Simulation** (`app.tab_simulation`) — run the full maturation model,
+     set live params.
+  2. **Data** (`app.tab_data`) — upload/generate the fluorescence trace to
+     fit.
+  3. **Bleaching Only Simulation** (`app.tab_bleaching`) — pure
+     photobleaching-decay fit, plus a known-bleaching-pole fit of the full
+     model.
+  4. **Bleaching Fit History** (`app.tab_bleaching_history`) — saved runs
+     from page 3.
+  5. **Variable Bleaching** (`app.tab_variable_bleaching`) — overlay F(t)
+     across several `kb` values, joint least-squares fit with shared `km`.
+  6. **Variable Bleaching History** (`app.tab_variable_bleaching_history`)
+     — saved joint fit runs from page 5.
+  7. **Least Squares Fitting** (`app.tab_fitting`) — single and multi-start
+     fits of the full model.
+  8. **Profile Likelihood** (`app.tab_profile_likelihood`) — parameter
+     identifiability sweeps (1D and 2D).
+  9. **Bode Plot** (`app.tab_bode`) — frequency response for user-entered
+     parameter sets.
+  10. **Multi-Start History** (`app.tab_multistart_history`) — saved
+      multi-start fit runs from page 7.
+  11. **Profile Likelihood History** (`app.tab_profile_history`) — saved
+      profile likelihood runs from page 8.
+- **Kalman Filter**:
+  1. **Synthetic Gene Expression** (`app.tab_synthetic_expression`) —
+     generate a ground-truth noisy fluorescence trace from a user-typed
+     u(t) formula and "true" rate constants.
+  2. **Kalman Filter** (`app.tab_kalman`) — filter page 1's noisy trace
+     using separately entered "estimated" (e.g. least-squares) rate
+     constants, reconstructing I/(X)/M/u.
+  3. **Kalman Filter History** (`app.tab_kalman_history`) — saved runs from
+     page 2.
 
 ## app/ (Streamlit tab modules)
 
@@ -66,6 +88,17 @@ its own.
   likelihood run.
 - `render_profile_2d_result(profile_df)` — renders the 2D (a, b) SSE
   contour plot + raw data table.
+- `render_kalman_result(result)` — renders a Kalman filter run's plots (2x2
+  grid for 1-step: F, I, M, u; 2x3 for 2-step: F, I, X, M, u, blank) plus
+  the F-vs-`expm(A*dt)` sanity-check caption. "True" curves use
+  `alpha_true` (falls back to a legacy single `alpha` key for history
+  entries saved before the true/estimated split existed); "Filtered"
+  curves use `alpha_est`. Shared by the Kalman Filter tab and its history
+  tab.
+- `render_synthetic_expression_result(result)` — renders a Synthetic Gene
+  Expression run's ground-truth plots (same 2x2/2x3 layout as
+  `render_kalman_result`, but with only true/noisy-measurement curves, no
+  filter estimate). Used by the Synthetic Gene Expression tab.
 - Constants `FORMULA_1STEP`, `FORMULA_2STEP`, `FORMULA_BLEACH` — LaTeX
   transfer-function strings shown alongside Bode plots.
 - `_multi_start_part(result)` / `_save_bleach_tab_history_entry()` —
@@ -235,6 +268,59 @@ grouped by dataset then by run, filterable by 1-step/2-step model.
 - `_render_pl_dataset_group(group, run_items)` — renders one dataset's
   ground-truth/noise header and its runs.
 
+### app/tab_synthetic_expression.py — Synthetic Gene Expression tab
+
+Generates the ground-truth noisy fluorescence trace that the Kalman Filter
+tab filters, from a user-typed u(t) formula plus "true" rate constants
+(which may differ from the Kalman Filter tab's own, separately entered
+"estimated" ones) -- mirroring how a real experiment's ground truth is
+never exactly what a fit recovers.
+
+- `render_synthetic_expression_tab()` — renders the 1-step/2-step model
+  choice, "true" rate constant/alpha/dt/n_steps/measurement-noise inputs,
+  and the u(t) equation text input (validated/evaluated by
+  `synthetic_expression.compile_u_expression`); on **Generate Synthetic
+  Data** calls `synthetic_expression.simulate_true_1step`/
+  `simulate_true_2step`, adds measurement noise via
+  `gaussian_noise.add_measurement_noise`, and renders the result via
+  `render_synthetic_expression_result`. Writes
+  `st.session_state["synthetic_expression_result"]`, which the Kalman
+  Filter tab reads as the trace to filter.
+
+### app/tab_kalman.py — Kalman Filter tab
+
+Ports `Kalman_Filter/1-step_Kalman_Filter.py` and
+`Kalman_Filter/2-step_Kalman_Filter.py` into the UI: user enters
+*estimated* rate constants (e.g. from Least Squares Fitting), alpha,
+process noise, and the filter's assumed measurement noise `sigma_F`, then
+filters the noisy trace generated in the Synthetic Gene Expression tab
+(model type, `dt`, and the trace itself all come from there, not
+re-entered here) -- instead of the scripts' hard-coded constants and
+self-generated synthetic data.
+
+- `render_kalman_tab()` — reads
+  `st.session_state["synthetic_expression_result"]` (shows an info message
+  if absent); renders the estimated rate constant/alpha/process-noise/
+  assumed-sigma_F inputs; on **Run Kalman Filter** calls
+  `Kalman_Filter_Model.run_kalman_1step`/`run_kalman_2step` against the
+  synthetic tab's noisy trace, merges its `I_est`/`M_est`/(`X_est`)/`u_est`
+  with that tab's `true_I`/`true_M`/(`true_X`)/`true_u`/`z_n` into one
+  result dict (`alpha_true` from the synthetic tab, `alpha_est` from this
+  tab's own input), renders it via `render_kalman_result`, and appends it
+  to history via `history_store.append_kalman_entry`. Writes
+  `st.session_state["kalman_result"]`.
+
+### app/tab_kalman_history.py — Kalman Filter History tab
+
+Displays saved Kalman filter runs, loaded from `kalman_history.json`, most
+recent first, filterable by 1-step/2-step model.
+
+- `render_kalman_history_tab()` — lists entries (filtered by model radio)
+  with a summary line, **Display**/**Delete**/**Clear history** buttons;
+  on Display, shows the run's input params (`st.json`) and renders its
+  plots via `render_kalman_result`. Writes
+  `st.session_state["kalman_history_displayed"]`.
+
 ## Top-level model/fitting modules
 
 ### Maturation_Models.py
@@ -245,9 +331,12 @@ plus their `simulate_*`/`residuals_*` helpers used by the Least Squares
 Fitting tab. No Streamlit dependency.
 
 - `model_1step(t, y, params)` — right-hand side of the 1-step model.
-  `params`: `u, km, kb, kd`.
+  `params`: `u, km, kb, kd`. `u` may be a scalar or a callable `u(t)`
+  (time-varying production rate); used by `synthetic_expression.py` to
+  drive the model with a user-typed gene expression signal.
 - `model_2step(t, y, params)` — right-hand side of the 2-step model.
-  `params`: `u, k1, k2, kb, kd`.
+  `params`: `u, k1, k2, kb, kd`. `u` may be scalar or callable, same as
+  `model_1step`.
 - `simulate_1step(t, params, I0, M0, B0)` — integrates `model_1step` with
   `solve_ivp` and returns `(t, I, M, B, F)`, where `F = alpha * M`.
 - `simulate_2step(t, params, I0, X0, M0, B0)` — same for the 2-step model,
@@ -416,12 +505,72 @@ Likelihood" section.
 - `plot_profile_2d(profile_df)` — contour plot of SSE over the (a, b)
   grid.
 
+### synthetic_expression.py
+
+Generates ground-truth I/(X)/M trajectories from a user-typed u(t) formula,
+for the Synthetic Gene Expression tab. Drives `Maturation_Models`'
+1-step/2-step ODEs with `u` as a time-varying callable (both models start
+from I = X = M = B = 0, since nothing has been translated yet at t=0),
+rather than reproducing ODE logic here. u(t) expressions are restricted to
+a small whitelist of names/AST node types before being handed to `eval`,
+since the formula is free-form user input. Used by the Synthetic Gene
+Expression tab.
+
+- `compile_u_expression(expr)` — validates (`ast.parse` + whitelist walk)
+  and compiles a u(t) formula string into a callable `u(t)`; raises
+  `ValueError` on disallowed syntax, names, or function calls. `t` may be a
+  Python float (queried by the ODE solver) or a numpy array (for
+  plotting/grid evaluation); constant expressions broadcast to match `t`'s
+  shape either way.
+- `simulate_true_1step(u_expr, km, kb, kd, alpha, dt, n_steps)` — compiles
+  `u_expr` and integrates the 1-step model via
+  `Maturation_Models.simulate_1step`; returns a dict (`t`, `true_u`,
+  `true_I`, `true_M`, `true_F = alpha * true_M`).
+- `simulate_true_2step(u_expr, km1, km2, kb, kd, alpha, dt, n_steps)` —
+  same for the 2-step model via `Maturation_Models.simulate_2step`; result
+  dict also has `true_X`.
+- Constant `EXPRESSION_HELP` — the allowed-syntax help text shown next to
+  the tab's u(t) equation input.
+
+### Kalman_Filter_Model.py
+
+Kalman filter for the 1-step and 2-step maturation models, factored out of
+`Kalman_Filter/1-step_Kalman_Filter.py`/`2-step_Kalman_Filter.py` into
+reusable functions so the Kalman Filter tab can run the same math with
+user-supplied parameters instead of the scripts' hard-coded constants. `u`
+is modelled as a random walk (driven only by process noise `qu`), appended
+to the maturation-pathway state vector. Filter-only: it does not generate
+ground truth or noisy measurements itself (that's `synthetic_expression.py`,
+used by the separate Synthetic Gene Expression tab) -- it just filters
+whatever noisy trace it's given, using its own (potentially different,
+e.g. least-squares-calibrated) rate constants. Used by the Kalman Filter
+tab.
+
+- `build_1step_system(km, kb, kd, alpha, dt)` — returns `(F, H, A)` for the
+  1-step `[I, M, u]` state space; closed-form `F` entries, with a
+  degenerate-pole (`a == b`) fallback (L'Hopital limit), matching the
+  script.
+- `build_2step_system(km1, km2, kb, kd, alpha, dt)` — returns `(F, H, A)`
+  for the 2-step `[I, X, M, u]` state space; falls back to `expm(A*dt)`
+  when any two of the three poles coincide (several removable
+  singularities would otherwise need separate limiting cases).
+- `run_kalman_1step(z_n, params)` / `run_kalman_2step(z_n, params)` —
+  filter an externally supplied noisy trace `z_n` (e.g. from
+  `synthetic_expression.py` + measurement noise): build `F`/`H`/`Q`/`R`
+  from `params` (`sigma_F` is the filter's *assumed* measurement noise std,
+  used for `R` -- may differ from whatever noise std actually generated
+  `z_n`), run the filter loop, and return a result dict (`I_est`/`M_est`/
+  (`X_est`)/`u_est`, `max_F_diff`). Raises `ValueError` if any pole
+  (`km+kd`, `kb+kd`, etc.) is not `> 0`, since the closed-form `F` entries
+  divide by it — a real risk once these are free-form UI inputs rather
+  than the scripts' hard-coded nonzero constants.
+
 ### history_store.py
 
-Disk persistence layer (JSON) for four kinds of run history, so past runs
+Disk persistence layer (JSON) for five kinds of run history, so past runs
 survive process restarts (unlike `st.session_state`). Each kind has
 `load_*`, `append_*`, `clear_*`, `delete_*` functions plus private
-record ↔ entry converters (DataFrame ⇄ JSON-safe dict).
+record ↔ entry converters (DataFrame/ndarray ⇄ JSON-safe dict).
 
 - `_load_records(path)` / `_save_records(path, records)` — internal JSON
   read/write helpers.
@@ -440,6 +589,16 @@ record ↔ entry converters (DataFrame ⇄ JSON-safe dict).
   `append_variable_bleaching_entry(entry)`,
   `clear_variable_bleaching_history()`,
   `delete_variable_bleaching_entry(index)`.
+- **Kalman filter history** (`kalman_history.json`):
+  `load_kalman_history()`, `append_kalman_entry(entry)`,
+  `clear_kalman_history()`, `delete_kalman_entry(index)` — stores the input
+  `params` dict (the tab's *estimated* rate constants) plus the full
+  `result` dict, which also carries the Synthetic Gene Expression tab's
+  ground truth (`true_I`/`true_M`/etc., `alpha_true`) alongside the
+  filter's own output (`I_est`/`M_est`/etc., `alpha_est`). Trajectories are
+  restored as ndarrays on load, not left as plain JSON lists, since
+  `render_kalman_result` does arithmetic like `alpha_true * true_M` on
+  them.
 
 ## Data files (not code)
 
@@ -466,6 +625,12 @@ restarts.
   values, noise params, fit seed, and results as `results_records` (older
   entries use a different legacy single-run schema with
   `shared_true`/`shared_fitted`/`per_trace_rows`).
+- **kalman_history.json** — one record per Kalman filter run from the
+  Kalman Filter tab: the input `params` dict (estimated rate constants)
+  and the full `result` dict (state/measurement trajectories as plain
+  lists, `is_two_step`/`alpha_true`/`alpha_est`/`max_F_diff` as scalars;
+  older entries saved before the true/estimated split have a single
+  `alpha` scalar instead).
 
 ## requirements.txt
 

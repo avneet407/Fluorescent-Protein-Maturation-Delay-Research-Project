@@ -241,10 +241,16 @@ def render_kalman_result(result):
     History tab (replaying a saved run). Layout mirrors
     Kalman_Filter/1-step_Kalman_Filter.py and 2-step_Kalman_Filter.py: a 2x2
     grid (F, I, M, u) for the 1-step model, 2x3 (F, I, X, M, u, blank) for
-    the 2-step model.
+    the 2-step model. "True" curves come from the Synthetic Gene Expression
+    tab's ground-truth rate constants; "Filtered" curves come from the
+    Kalman Filter tab's own (e.g. least-squares-calibrated) rate constants
+    -- the two are expected to differ, that's the point of the comparison.
+    `alpha_true`/`alpha_est` fall back to a single legacy `alpha` key for
+    history entries saved before the true/estimated split existed.
     """
     t = result["t"]
-    alpha = result["alpha"]
+    alpha_true = result.get("alpha_true", result.get("alpha"))
+    alpha_est = result.get("alpha_est", result.get("alpha"))
 
     st.caption(
         "Sanity check -- max element-wise difference between the closed-form "
@@ -258,8 +264,8 @@ def render_kalman_result(result):
 
     ax = axes[0, 0]
     ax.scatter(t, result["z_n"], c="gray", s=15, alpha=0.5, label="Noisy fluorescence measurements")
-    ax.plot(t, alpha * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha * M_true)")
-    ax.plot(t, alpha * result["M_est"], "b-", lw=2, label="Filtered (alpha * M_est)")
+    ax.plot(t, alpha_true * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha_true * M_true)")
+    ax.plot(t, alpha_est * result["M_est"], "b-", lw=2, label="Filtered (alpha_est * M_est)")
     ax.set_xlabel("Time")
     ax.set_ylabel("Fluorescence")
     ax.set_title("Fluorescence: measured vs. reconstructed")
@@ -300,6 +306,71 @@ def render_kalman_result(result):
     ax.set_xlabel("Time")
     ax.set_ylabel("Synthesis rate u")
     ax.set_title("Reconstructed gene expression rate (the target)")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    if result["is_two_step"]:
+        axes[1, 2].axis("off")
+
+    fig.tight_layout()
+    st.pyplot(fig)
+
+
+def render_synthetic_expression_result(result):
+    """Render the ground-truth u(t)/I/(X)/M/fluorescence plots for one
+    Synthetic Gene Expression run.
+
+    Same layout convention as `render_kalman_result` (2x2 for 1-step, 2x3
+    for 2-step), but with only "true"/noisy-measurement curves -- there is
+    no filter estimate yet at this stage.
+    """
+    t = result["t"]
+    alpha = result["alpha"]
+
+    if result["is_two_step"]:
+        fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    else:
+        fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+
+    ax = axes[0, 0]
+    ax.scatter(t, result["z_n"], c="gray", s=15, alpha=0.5, label="Noisy fluorescence measurements")
+    ax.plot(t, alpha * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha * M_true)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Fluorescence")
+    ax.set_title("Fluorescence: true vs. noisy measurement")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    ax = axes[0, 1]
+    ax.plot(t, result["true_I"], "g--", lw=1.5, label="True I(t)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Immature protein I")
+    ax.set_title("Immature protein pool")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    if result["is_two_step"]:
+        ax = axes[0, 2]
+        ax.plot(t, result["true_X"], "g--", lw=1.5, label="True X(t)")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Intermediate protein X")
+        ax.set_title("Intermediate protein pool")
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3)
+
+    ax = axes[1, 0]
+    ax.plot(t, result["true_M"], "g--", lw=1.5, label="True M(t)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Mature protein M")
+    ax.set_title("Mature protein pool")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    ax = axes[1, 1]
+    ax.plot(t, result["true_u"], "g--", lw=1.5, label="True u(t) (gene expression)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Synthesis rate u")
+    ax.set_title("Gene expression signal (user-defined u(t))")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
 

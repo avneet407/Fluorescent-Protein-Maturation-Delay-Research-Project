@@ -3,23 +3,29 @@
 Lets a user simulate 1-step and 2-step maturation ODE models, generate or
 upload fluorescence decay data, fit model parameters to that data (single
 fit or many randomized multi-start fits), profile individual parameters'
-identifiability, inspect frequency-domain (Bode) behavior, and separately
-fit a pure photobleaching decay model plus a "known bleaching pole" variant
-of the full model.
+identifiability, inspect frequency-domain (Bode) behavior, separately fit a
+pure photobleaching decay model plus a "known bleaching pole" variant of the
+full model, generate a ground-truth noisy trace from a user-typed gene
+expression signal u(t), and reconstruct hidden states from that trace with
+a Kalman filter using separately calibrated rate constants.
 
-This file is the thin entry point: it sets up the page and the tab strip,
-then delegates each tab's content to a `render_*` function in `app/`. The
-Simulation tab's render function returns a `sim_state` dict of its current
-widget values, passed into the Data tab (the only other one that needs
-"what's currently set in the Simulation tab" as defaults) -- the same data
-flow the original single-file version had via plain script-level variables,
-made explicit now that each tab lives in its own module. Every other tab
-(including Bode Plot, which takes its own directly-entered parameter sets)
-communicates via `st.session_state`, same as before.
+This file is the thin entry point: it sets up the page, builds one
+`st.Page` per tab wrapping a `render_*` function from `app/`, and groups
+them into a sidebar `st.navigation` with two sections ("Parameter
+Identification", "Kalman Filter") -- the sidebar's own section headers
+already separate the two areas, so there's no separate Home page.
+`st.navigation` runs only the current page's function each rerun (unlike
+the old single-page tab strip, where every tab's code ran every rerun), so
+the Simulation page's
+`sim_state` -- needed as defaults by the Data page -- is stashed in
+`st.session_state["sim_state"]` so the Data page can read it back on a later,
+separate rerun. Every other page communicates purely via `st.session_state`,
+same as before.
 
 The plain-Python model/fitting/plotting logic lives in the sibling modules
 imported by the `app/` tab modules (Maturation_Models.py,
-Bleaching_Only_Model.py, etc.) and has no Streamlit dependency.
+Bleaching_Only_Model.py, Kalman_Filter_Model.py, etc.) and has no Streamlit
+dependency.
 """
 
 import streamlit as st
@@ -33,87 +39,100 @@ from app.tab_variable_bleaching_history import render_variable_bleaching_history
 from app.tab_fitting import render_fitting_tab
 from app.tab_profile_likelihood import render_profile_likelihood_tab
 from app.tab_bode import render_bode_tab
+from app.tab_synthetic_expression import render_synthetic_expression_tab
 from app.tab_kalman import render_kalman_tab
 from app.tab_kalman_history import render_kalman_history_tab
 from app.tab_multistart_history import render_multistart_history_tab
 from app.tab_profile_history import render_profile_history_tab
 
-# ---------------------------------------------------------
-# Streamlit UI
-# ---------------------------------------------------------
-# Tabs, in display order:
-#   Simulation              - run the full maturation model, set live params
-#   Data                    - upload/generate the fluorescence trace to fit
-#   Bleaching Only Simulation - pure photobleaching-decay model: fit it, fit
-#                              the full model with its decay pole fixed, and
-#                              Bode-plot both against the synthetic input
-#   Bleaching Fit History    - saved runs from the tab above
-#   Variable Bleaching       - kd fixed at 0; overlay F(t) across several kb
-#                              values with km/alpha/etc. held fixed; joint
-#                              least-squares fit across traces (shared km)
-#   Variable Bleaching History - saved joint fit runs from the tab above
-#   Least Squares Fitting    - single and multi-start fits of the full model
-#   Profile Likelihood       - parameter identifiability sweeps (1D and 2D)
-#   Bode Plot                - frequency response of the full model for
-#                              user-entered parameter sets, overlaid
-#   Multi-Start History      - saved multi-start fit runs
-#   Profile Likelihood History - saved profile likelihood runs
-#   Kalman Filter            - reconstruct I/(X)/M/u from a synthetic noisy
-#                              fluorescence trace given calibrated rate
-#                              constants (e.g. from Least Squares Fitting)
-#   Kalman Filter History    - saved Kalman filter runs
+APP_TITLE = "Fluorescent Protein Maturation Delay Model"
 
-st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
-st.title("Fluorescent Protein Maturation Delay Model")
+st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-(
-    sim_tab, upload_tab, bleach_tab, bleach_history_tab, variable_bleach_tab,
-    variable_bleach_history_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab,
-    kalman_tab, kalman_history_tab,
-) = st.tabs(
-    [
-        "Simulation", "Data", "Bleaching Only Simulation", "Bleaching Fit History",
-        "Variable Bleaching", "Variable Bleaching History", "Least Squares Fitting",
-        "Profile Likelihood", "Bode Plot", "Multi-Start History", "Profile Likelihood History",
-        "Kalman Filter", "Kalman Filter History",
-    ]
+
+def _page(render_fn):
+    """Wrap a no-arg tab render function into an `st.navigation` page callable.
+
+    Each page is its own script rerun under `st.navigation`, so the page
+    title (shown once above every tab under the old single-page layout) has
+    to be set again on every page. Streamlit infers a page's URL pathname
+    from the wrapper function's `__name__` when `url_path` isn't given
+    explicitly to `st.Page` -- since every page here is wrapped by this same
+    function, they'd otherwise all collide on the pathname `_run`, so every
+    `st.Page(...)` call below passes its own `url_path` explicitly.
+    """
+    def _run():
+        st.title(APP_TITLE)
+        render_fn()
+    return _run
+
+
+def _simulation_page():
+    st.title(APP_TITLE)
+    st.session_state["sim_state"] = render_simulation_tab()
+
+
+def _data_page():
+    st.title(APP_TITLE)
+    sim_state = st.session_state.get("sim_state")
+    if sim_state is None:
+        st.info(
+            "Visit the **Simulation** page first (in **Parameter "
+            "Identification**) to set the parameters used as this page's "
+            "defaults."
+        )
+    else:
+        render_data_tab(sim_state)
+
+
+# ---------------------------------------------------------
+# Pages
+# ---------------------------------------------------------
+
+sim_page = st.Page(_simulation_page, title="Simulation", url_path="simulation", default=True)
+data_page = st.Page(_data_page, title="Data", url_path="data")
+bleach_page = st.Page(
+    _page(render_bleaching_tab), title="Bleaching Only Simulation", url_path="bleaching",
+)
+bleach_history_page = st.Page(
+    _page(render_bleaching_history_tab), title="Bleaching Fit History", url_path="bleaching-history",
+)
+variable_bleach_page = st.Page(
+    _page(render_variable_bleaching_tab), title="Variable Bleaching", url_path="variable-bleaching",
+)
+variable_bleach_history_page = st.Page(
+    _page(render_variable_bleaching_history_tab), title="Variable Bleaching History",
+    url_path="variable-bleaching-history",
+)
+fit_page = st.Page(_page(render_fitting_tab), title="Least Squares Fitting", url_path="fitting")
+profile_page = st.Page(
+    _page(render_profile_likelihood_tab), title="Profile Likelihood", url_path="profile-likelihood",
+)
+bode_page = st.Page(_page(render_bode_tab), title="Bode Plot", url_path="bode")
+ms_history_page = st.Page(
+    _page(render_multistart_history_tab), title="Multi-Start History", url_path="multi-start-history",
+)
+pl_history_page = st.Page(
+    _page(render_profile_history_tab), title="Profile Likelihood History",
+    url_path="profile-likelihood-history",
 )
 
-with sim_tab:
-    sim_state = render_simulation_tab()
+synthetic_expression_page = st.Page(
+    _page(render_synthetic_expression_tab), title="Synthetic Gene Expression", url_path="synthetic-expression",
+)
+kalman_page = st.Page(_page(render_kalman_tab), title="Kalman Filter", url_path="kalman-filter")
+kalman_history_page = st.Page(
+    _page(render_kalman_history_tab), title="Kalman Filter History", url_path="kalman-filter-history",
+)
 
-with upload_tab:
-    render_data_tab(sim_state)
 
-with bleach_tab:
-    render_bleaching_tab()
-
-with bleach_history_tab:
-    render_bleaching_history_tab()
-
-with variable_bleach_tab:
-    render_variable_bleaching_tab()
-
-with variable_bleach_history_tab:
-    render_variable_bleaching_history_tab()
-
-with fit_tab:
-    render_fitting_tab()
-
-with profile_tab:
-    render_profile_likelihood_tab()
-
-with bode_tab:
-    render_bode_tab()
-
-with ms_history_tab:
-    render_multistart_history_tab()
-
-with pl_history_tab:
-    render_profile_history_tab()
-
-with kalman_tab:
-    render_kalman_tab()
-
-with kalman_history_tab:
-    render_kalman_history_tab()
+nav = st.navigation({
+    "Parameter Identification": [
+        sim_page, data_page, bleach_page, bleach_history_page,
+        variable_bleach_page, variable_bleach_history_page,
+        fit_page, profile_page, bode_page,
+        ms_history_page, pl_history_page,
+    ],
+    "Kalman Filter": [synthetic_expression_page, kalman_page, kalman_history_page],
+})
+nav.run()
