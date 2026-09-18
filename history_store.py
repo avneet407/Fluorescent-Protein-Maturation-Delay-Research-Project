@@ -10,6 +10,7 @@ the session ends.
 import json
 import os
 
+import numpy as np
 import pandas as pd
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +18,7 @@ MULTI_START_HISTORY_FILE = os.path.join(MODULE_DIR, "multi_start_history.json")
 PROFILE_HISTORY_FILE = os.path.join(MODULE_DIR, "profile_likelihood_history.json")
 BLEACH_HISTORY_FILE = os.path.join(MODULE_DIR, "bleach_fit_history.json")
 VARIABLE_BLEACH_HISTORY_FILE = os.path.join(MODULE_DIR, "variable_bleaching_history.json")
+KALMAN_HISTORY_FILE = os.path.join(MODULE_DIR, "kalman_history.json")
 
 
 def _load_records(path):
@@ -345,3 +347,79 @@ def delete_variable_bleaching_entry(index):
     if 0 <= index < len(records):
         del records[index]
         _save_records(VARIABLE_BLEACH_HISTORY_FILE, records)
+
+
+# ---------------------------------------------------------
+# Kalman filter run history
+# ---------------------------------------------------------
+#
+# Each entry is one Kalman_Filter_Model.run_kalman_1step/2step call: the
+# input `params` dict (rate constants, alpha, dt, process/measurement noise,
+# synthetic-signal settings, seed) plus the full `result` dict it returned
+# (t, z_n, true/estimated state trajectories, alpha, max_F_diff), stored as
+# plain lists so the history tab can fully replot a past run via
+# app.shared.render_kalman_result without re-running the filter.
+
+_KALMAN_ARRAY_KEYS = (
+    "t", "z_n", "true_I", "true_X", "true_M", "true_u",
+    "I_est", "X_est", "M_est", "u_est",
+)
+
+
+def _kalman_entry_to_record(entry):
+    """Convert one in-memory Kalman filter entry (with ndarrays in `result`) to a JSON-safe dict."""
+    result = entry["result"]
+    result_record = {}
+    for key, value in result.items():
+        if key in _KALMAN_ARRAY_KEYS:
+            result_record[key] = list(value)
+        else:
+            result_record[key] = value
+    return {
+        "timestamp": entry["timestamp"],
+        "params": dict(entry["params"]),
+        "result": result_record,
+    }
+
+
+def _kalman_record_to_entry(record):
+    """Convert one on-disk Kalman filter JSON record back to an in-memory entry.
+
+    Array-valued result fields are restored as ndarrays (not left as plain
+    JSON lists), since app.shared.render_kalman_result does arithmetic on
+    them (e.g. `alpha * true_M`), which raises TypeError on a plain list.
+    """
+    result = dict(record["result"])
+    for key in _KALMAN_ARRAY_KEYS:
+        if key in result:
+            result[key] = np.asarray(result[key], dtype=float)
+    return {
+        "timestamp": record["timestamp"],
+        "params": dict(record["params"]),
+        "result": result,
+    }
+
+
+def load_kalman_history():
+    """Load all stored Kalman filter run history entries from disk (returns [] if none exist yet)."""
+    return [_kalman_record_to_entry(r) for r in _load_records(KALMAN_HISTORY_FILE)]
+
+
+def append_kalman_entry(entry):
+    """Append one in-memory Kalman filter entry (with a `result` dict of ndarrays) to its on-disk history file."""
+    records = _load_records(KALMAN_HISTORY_FILE)
+    records.append(_kalman_entry_to_record(entry))
+    _save_records(KALMAN_HISTORY_FILE, records)
+
+
+def clear_kalman_history():
+    """Delete all stored Kalman filter run history entries."""
+    _save_records(KALMAN_HISTORY_FILE, [])
+
+
+def delete_kalman_entry(index):
+    """Delete the Kalman filter history entry at position `index` (0-based, oldest first)."""
+    records = _load_records(KALMAN_HISTORY_FILE)
+    if 0 <= index < len(records):
+        del records[index]
+        _save_records(KALMAN_HISTORY_FILE, records)

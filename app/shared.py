@@ -234,6 +234,82 @@ def render_profile_likelihood_result(profile_df, profile_target, true_value=None
         st.dataframe(profile_df, hide_index=True)
 
 
+def render_kalman_result(result):
+    """Render the fluorescence/state-trajectory plots for one Kalman filter run.
+
+    Shared by the Kalman Filter tab (right after a run) and the Kalman Filter
+    History tab (replaying a saved run). Layout mirrors
+    Kalman_Filter/1-step_Kalman_Filter.py and 2-step_Kalman_Filter.py: a 2x2
+    grid (F, I, M, u) for the 1-step model, 2x3 (F, I, X, M, u, blank) for
+    the 2-step model.
+    """
+    t = result["t"]
+    alpha = result["alpha"]
+
+    st.caption(
+        "Sanity check -- max element-wise difference between the closed-form "
+        f"F and `expm(A*dt)`: {result['max_F_diff']:.3g} (should be ~0)."
+    )
+
+    if result["is_two_step"]:
+        fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    else:
+        fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+
+    ax = axes[0, 0]
+    ax.scatter(t, result["z_n"], c="gray", s=15, alpha=0.5, label="Noisy fluorescence measurements")
+    ax.plot(t, alpha * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha * M_true)")
+    ax.plot(t, alpha * result["M_est"], "b-", lw=2, label="Filtered (alpha * M_est)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Fluorescence")
+    ax.set_title("Fluorescence: measured vs. reconstructed")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    ax = axes[0, 1]
+    ax.plot(t, result["true_I"], "g--", lw=1.5, label="True I(t)")
+    ax.plot(t, result["I_est"], "b-", lw=2, label="Filtered I(t)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Immature protein I")
+    ax.set_title("Immature protein pool")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    if result["is_two_step"]:
+        ax = axes[0, 2]
+        ax.plot(t, result["true_X"], "g--", lw=1.5, label="True X(t)")
+        ax.plot(t, result["X_est"], "b-", lw=2, label="Filtered X(t)")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Intermediate protein X")
+        ax.set_title("Intermediate protein pool")
+        ax.legend(fontsize=8)
+        ax.grid(alpha=0.3)
+
+    ax = axes[1, 0]
+    ax.plot(t, result["true_M"], "g--", lw=1.5, label="True M(t)")
+    ax.plot(t, result["M_est"], "b-", lw=2, label="Filtered M(t)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Mature protein M")
+    ax.set_title("Mature protein pool")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    ax = axes[1, 1]
+    ax.plot(t, result["true_u"], "g--", lw=1.5, label="True u(t) (gene expression)")
+    ax.plot(t, result["u_est"], "b-", lw=1.5, alpha=0.6, label="Filtered u(t)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Synthesis rate u")
+    ax.set_title("Reconstructed gene expression rate (the target)")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+
+    if result["is_two_step"]:
+        axes[1, 2].axis("off")
+
+    fig.tight_layout()
+    st.pyplot(fig)
+
+
 def render_profile_2d_result(profile_df):
     """Render the 2D (a, b) SSE contour plot + raw data table for one 2D profile likelihood run.
 

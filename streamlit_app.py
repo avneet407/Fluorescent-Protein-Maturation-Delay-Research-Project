@@ -33,6 +33,8 @@ from app.tab_variable_bleaching_history import render_variable_bleaching_history
 from app.tab_fitting import render_fitting_tab
 from app.tab_profile_likelihood import render_profile_likelihood_tab
 from app.tab_bode import render_bode_tab
+from app.tab_kalman import render_kalman_tab
+from app.tab_kalman_history import render_kalman_history_tab
 from app.tab_multistart_history import render_multistart_history_tab
 from app.tab_profile_history import render_profile_history_tab
 
@@ -56,6 +58,10 @@ from app.tab_profile_history import render_profile_history_tab
 #                              user-entered parameter sets, overlaid
 #   Multi-Start History      - saved multi-start fit runs
 #   Profile Likelihood History - saved profile likelihood runs
+#   Kalman Filter            - reconstruct I/(X)/M/u from a synthetic noisy
+#                              fluorescence trace given calibrated rate
+#                              constants (e.g. from Least Squares Fitting)
+#   Kalman Filter History    - saved Kalman filter runs
 
 st.set_page_config(page_title="Fluorescent Protein Maturation", layout="wide")
 st.title("Fluorescent Protein Maturation Delay Model")
@@ -63,11 +69,13 @@ st.title("Fluorescent Protein Maturation Delay Model")
 (
     sim_tab, upload_tab, bleach_tab, bleach_history_tab, variable_bleach_tab,
     variable_bleach_history_tab, fit_tab, profile_tab, bode_tab, ms_history_tab, pl_history_tab,
+    kalman_tab, kalman_history_tab,
 ) = st.tabs(
     [
         "Simulation", "Data", "Bleaching Only Simulation", "Bleaching Fit History",
         "Variable Bleaching", "Variable Bleaching History", "Least Squares Fitting",
         "Profile Likelihood", "Bode Plot", "Multi-Start History", "Profile Likelihood History",
+        "Kalman Filter", "Kalman Filter History",
     ]
 )
 
@@ -103,3 +111,9 @@ with ms_history_tab:
 
 with pl_history_tab:
     render_profile_history_tab()
+
+with kalman_tab:
+    render_kalman_tab()
+
+with kalman_history_tab:
+    render_kalman_history_tab()

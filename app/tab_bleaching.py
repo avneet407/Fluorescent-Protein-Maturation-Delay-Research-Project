@@ -24,6 +24,7 @@ from multi_start_plots import plot_histograms
 from history_store import append_bleach_entry
 
 from app.shared import render_multi_start_results
+from app.tab_simulation import SPECIES_COLORS
 
 
 def _multi_start_part(result):
@@ -169,9 +170,10 @@ def render_bleaching_tab():
         st.info("Set your parameters above and click **Run Simulation**.")
     else:
         fig_b, ax_b = plt.subplots(figsize=(9, 5))
-        ax_b.plot(bleach_sim["t"], bleach_sim["M"], label="M (mature)")
-        ax_b.plot(bleach_sim["t"], bleach_sim["B"], label="B (bleached)")
-        ax_b.plot(bleach_sim["t"], bleach_sim["F"], "--", label="F = alpha * M (fluorescence)", linewidth=2)
+        ax_b.plot(bleach_sim["t"], bleach_sim["M"], label="M (mature)", color=SPECIES_COLORS["M"])
+        ax_b.plot(bleach_sim["t"], bleach_sim["B"], label="B (bleached)", color=SPECIES_COLORS["B"])
+        ax_b.plot(bleach_sim["t"], bleach_sim["F"], "--", label="F = alpha * M (fluorescence)",
+                  linewidth=2, color=SPECIES_COLORS["F"])
         ax_b.set_xlabel("Time (sec)")
         ax_b.set_ylabel("Amount / Mean Intensity")
         ax_b.set_title("Bleaching-only model (I(t) ~ 0)")

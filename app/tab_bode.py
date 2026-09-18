@@ -152,7 +152,7 @@ def render_bode_tab():
     ax_mag.set_title("Bode Plot")
     ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
     ax_phase.set_ylabel("Phase (degrees)")
-    ax_phase.set_xlabel("Frequency (rad/sec)")
+    ax_phase.set_xlabel("Frequency (rad/minute)")
     ax_phase.grid(True, which="both", linestyle="--", alpha=0.5)
 
     has_one_step = any(not ps["is_two_step"] for ps in param_sets)

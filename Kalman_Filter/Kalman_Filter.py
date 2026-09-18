@@ -1,6 +1,5 @@
 """
-Kalman Filter: Rocket Altitude Estimation (Example 10, kalmanfilter.net style)
--- matches the book's exact iteration structure, including gravity compensation --
+Kalman Filter: Rocket Altitude Estimation (Example 10)
 """
 
 import numpy as np
