@@ -148,7 +148,7 @@ def render_bode_tab():
 
     fig, (ax_mag, ax_phase) = plt.subplots(2, 1, figsize=(8, 6))
     ax_mag.set_ylabel("Magnitude (dB)")
-    ax_mag.set_xlabel("Frequency (rad/sec)")
+    ax_mag.set_xlabel("Frequency (rad/minute)")
     ax_mag.set_title("Bode Plot")
     ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
     ax_phase.set_ylabel("Phase (degrees)")
