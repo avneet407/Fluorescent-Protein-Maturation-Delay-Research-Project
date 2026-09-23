@@ -1,10 +1,16 @@
-"""Kalman filter for fluorescent protein maturation delay (1-step and 2-step).
+"""Kalman filter + RTS smoother for fluorescent protein maturation delay
+(1-step and 2-step).
 
-Ports the closed-form discretized state-space model from
+Ports the closed-form discretized state-space model and RTS smoother from
 Kalman_Filter/1-step_Kalman_Filter.py and Kalman_Filter/2-step_Kalman_Filter.py
 into reusable functions, so the Streamlit Kalman Filter tab (and its history
 replay) can run the same math with user-supplied parameters instead of the
-hard-coded constants at the top of those scripts.
+hard-coded constants at the top of those scripts. The forward Kalman filter
+pass only uses measurements up to the current time step; the backward RTS
+(Rauch-Tung-Striebel) smoother pass then revisits every step using the whole
+trace (including future measurements), which is strictly more accurate at
+every interior point but can only be computed after the run has finished,
+not causally in real time.
 
 This module is filter-only: it does not generate ground truth or noisy
 measurements itself. The noisy fluorescence trace it filters comes from the
@@ -115,12 +121,20 @@ def build_2step_system(km1, km2, kb, kd, alpha, dt):
 
 
 def _run_filter_loop(F, H, Q, R, z_n, n_states):
-    """Standard discrete Kalman filter loop shared by both models.
+    """Standard discrete Kalman filter (forward pass) shared by both models.
 
     Iteration zero predicts from x=0 with no measurement yet (matching the
     scripts' "no known input to add" comment -- u enters only as a random-walk
     state, not an exogenous term), then each step updates on z_n[i] and
     predicts forward to the next step.
+
+    Besides the filtered estimates (`x_est_all`, i.e. x_{n|n}), also returns
+    the per-step posterior covariance (`P_est_all`, P_{n|n}) and the prior
+    state/covariance each step was predicted from (`x_pred_all`/`P_pred_all`,
+    x_{n|n-1}/P_{n|n-1}) -- both needed by `_rts_smoother` below.
+    `x_pred_all[0]`/`P_pred_all[0]` hold the "iteration zero" prior (before
+    any measurement); the smoother never reads them, since there is nothing
+    before step 0 to smooth against.
     """
     n_steps = len(z_n)
     x = np.zeros((n_states, 1))
@@ -130,6 +144,12 @@ def _run_filter_loop(F, H, Q, R, z_n, n_states):
     P = F @ P @ F.T + Q
 
     x_est_all = np.zeros((n_steps, n_states))
+    P_est_all = np.zeros((n_steps, n_states, n_states))
+    x_pred_all = np.zeros((n_steps, n_states))
+    P_pred_all = np.zeros((n_steps, n_states, n_states))
+    x_pred_all[0] = x.flatten()
+    P_pred_all[0] = P
+
     for n_i in range(n_steps):
         z = np.array([[z_n[n_i]]])
         K = P @ H.T @ np.linalg.inv(H @ P @ H.T + R)
@@ -138,12 +158,54 @@ def _run_filter_loop(F, H, Q, R, z_n, n_states):
         P = (I_mat - K @ H) @ P @ (I_mat - K @ H).T + K @ R @ K.T
 
         x_est_all[n_i] = x.flatten()
+        P_est_all[n_i] = P
 
         if n_i < n_steps - 1:
             x = F @ x
             P = F @ P @ F.T + Q
+            x_pred_all[n_i + 1] = x.flatten()
+            P_pred_all[n_i + 1] = P
 
-    return x_est_all
+    return x_est_all, P_est_all, x_pred_all, P_pred_all
+
+
+def _rts_smoother(F, x_est_all, P_est_all, x_pred_all, P_pred_all):
+    """Rauch-Tung-Striebel fixed-interval smoother (backward pass).
+
+    Unlike the forward filter estimate x_{n|n} (which only uses measurements
+    up to n), the smoothed estimate x_{n|N} uses *every* measurement in the
+    run, including future ones -- strictly more accurate at every interior
+    point, at the cost of only being computable after the whole trace has
+    been collected (not causally, in real time).
+
+    Starts from the last step (smoother == filter there, since there is no
+    future data beyond N) and works backward, matching each step's filtered
+    estimate against the *next* step's smoothed correction via the smoother
+    gain `C_n = P_{n|n} F^T (P_{n+1|n})^{-1}` (solved via `np.linalg.solve`
+    for numerical stability rather than an explicit matrix inverse).
+    """
+    n_steps, n_states = x_est_all.shape
+    x_smooth_all = np.zeros((n_steps, n_states))
+    P_smooth_all = np.zeros((n_steps, n_states, n_states))
+
+    x_smooth_all[-1] = x_est_all[-1]
+    P_smooth_all[-1] = P_est_all[-1]
+
+    for n_i in range(n_steps - 2, -1, -1):
+        P_filt_n = P_est_all[n_i]
+        P_pred_np1 = P_pred_all[n_i + 1]
+
+        rhs = (P_filt_n @ F.T).T
+        C_n_T = np.linalg.solve(P_pred_np1.T, rhs)
+        C_n = C_n_T.T
+
+        x_diff = x_smooth_all[n_i + 1] - x_pred_all[n_i + 1]
+        x_smooth_all[n_i] = x_est_all[n_i] + C_n @ x_diff
+
+        P_diff = P_smooth_all[n_i + 1] - P_pred_np1
+        P_smooth_all[n_i] = P_filt_n + C_n @ P_diff @ C_n.T
+
+    return x_smooth_all, P_smooth_all
 
 
 def run_kalman_1step(z_n, params):
@@ -174,10 +236,19 @@ def run_kalman_1step(z_n, params):
     F_check = expm(A * dt)
     max_F_diff = float(np.max(np.abs(F - F_check)))
 
-    x_est_all = _run_filter_loop(F, H, Q, R, np.asarray(z_n, dtype=float), n_states=3)
+    x_est_all, P_est_all, x_pred_all, P_pred_all = _run_filter_loop(
+        F, H, Q, R, np.asarray(z_n, dtype=float), n_states=3,
+    )
     I_est, M_est, u_est = x_est_all[:, 0], x_est_all[:, 1], x_est_all[:, 2]
 
-    return {"I_est": I_est, "M_est": M_est, "u_est": u_est, "max_F_diff": max_F_diff}
+    x_smooth_all, _ = _rts_smoother(F, x_est_all, P_est_all, x_pred_all, P_pred_all)
+    I_smooth, M_smooth, u_smooth = x_smooth_all[:, 0], x_smooth_all[:, 1], x_smooth_all[:, 2]
+
+    return {
+        "I_est": I_est, "M_est": M_est, "u_est": u_est,
+        "I_smooth": I_smooth, "M_smooth": M_smooth, "u_smooth": u_smooth,
+        "max_F_diff": max_F_diff,
+    }
 
 
 def run_kalman_2step(z_n, params):
@@ -210,9 +281,20 @@ def run_kalman_2step(z_n, params):
     F_check = expm(A * dt)
     max_F_diff = float(np.max(np.abs(F - F_check)))
 
-    x_est_all = _run_filter_loop(F, H, Q, R, np.asarray(z_n, dtype=float), n_states=4)
+    x_est_all, P_est_all, x_pred_all, P_pred_all = _run_filter_loop(
+        F, H, Q, R, np.asarray(z_n, dtype=float), n_states=4,
+    )
     I_est, X_est, M_est, u_est = (
         x_est_all[:, 0], x_est_all[:, 1], x_est_all[:, 2], x_est_all[:, 3],
     )
 
-    return {"I_est": I_est, "X_est": X_est, "M_est": M_est, "u_est": u_est, "max_F_diff": max_F_diff}
+    x_smooth_all, _ = _rts_smoother(F, x_est_all, P_est_all, x_pred_all, P_pred_all)
+    I_smooth, X_smooth, M_smooth, u_smooth = (
+        x_smooth_all[:, 0], x_smooth_all[:, 1], x_smooth_all[:, 2], x_smooth_all[:, 3],
+    )
+
+    return {
+        "I_est": I_est, "X_est": X_est, "M_est": M_est, "u_est": u_est,
+        "I_smooth": I_smooth, "X_smooth": X_smooth, "M_smooth": M_smooth, "u_smooth": u_smooth,
+        "max_F_diff": max_F_diff,
+    }

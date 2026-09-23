@@ -86,7 +86,7 @@ def render_bode_result(br, title):
     ax_mag.semilogx(br["w"], br["mag_syn"], color="tab:green", linestyle="--", label="Synthetic input")
     ax_mag.semilogx(br["w"], br["mag_fit"], color="tab:red", linestyle=":", label=br["fit_label"])
     ax_mag.set_ylabel("Magnitude (dB)")
-    ax_mag.set_xlabel("Frequency (rad/sec)")
+    ax_mag.set_xlabel("Frequency (rad/min)")
     ax_mag.set_title(title)
     ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
     ax_mag.legend(fontsize=8)
@@ -94,7 +94,7 @@ def render_bode_result(br, title):
     ax_phase.semilogx(br["w"], br["phase_syn"], color="tab:green", linestyle="--", label="Synthetic input")
     ax_phase.semilogx(br["w"], br["phase_fit"], color="tab:red", linestyle=":", label=br["fit_label"])
     ax_phase.set_ylabel("Phase (degrees)")
-    ax_phase.set_xlabel("Frequency (rad/sec)")
+    ax_phase.set_xlabel("Frequency (rad/min)")
     ax_phase.grid(True, which="both", linestyle="--", alpha=0.5)
     ax_phase.legend(fontsize=8)
 
@@ -103,11 +103,11 @@ def render_bode_result(br, title):
 
     cutoff_col1, cutoff_col2 = st.columns(2)
     if br["cutoff_syn"] is not None:
-        cutoff_col1.metric("Synthetic input -3 dB cutoff (rad/sec)", f"{br['cutoff_syn']:.6f}")
+        cutoff_col1.metric("Synthetic input -3 dB cutoff (rad/min)", f"{br['cutoff_syn']:.6f}")
     else:
         cutoff_col1.warning("Synthetic input cutoff not found (no positive real root).")
     if br["cutoff_fit"] is not None:
-        cutoff_col2.metric("Multi-start fit -3 dB cutoff (rad/sec)", f"{br['cutoff_fit']:.6f}")
+        cutoff_col2.metric("Multi-start fit -3 dB cutoff (rad/min)", f"{br['cutoff_fit']:.6f}")
     else:
         cutoff_col2.warning("Multi-start fit cutoff not found (no positive real root).")
 
@@ -242,15 +242,18 @@ def render_kalman_result(result):
     Kalman_Filter/1-step_Kalman_Filter.py and 2-step_Kalman_Filter.py: a 2x2
     grid (F, I, M, u) for the 1-step model, 2x3 (F, I, X, M, u, blank) for
     the 2-step model. "True" curves come from the Synthetic Gene Expression
-    tab's ground-truth rate constants; "Filtered" curves come from the
-    Kalman Filter tab's own (e.g. least-squares-calibrated) rate constants
-    -- the two are expected to differ, that's the point of the comparison.
-    `alpha_true`/`alpha_est` fall back to a single legacy `alpha` key for
-    history entries saved before the true/estimated split existed.
+    tab's ground-truth rate constants; "Filtered"/"Smoothed" curves come from
+    the Kalman Filter tab's own (e.g. least-squares-calibrated) rate constants
+    -- true vs. filtered/smoothed are expected to differ, that's the point of
+    the comparison. Also shows a comparative RMSE table (filtered vs. smoothed
+    against ground truth) below the plots. `alpha_true`/`alpha_est` fall back
+    to a single legacy `alpha` key, and the RTS-smoothed curves/RMSE rows are
+    skipped entirely, for history entries saved before those existed.
     """
     t = result["t"]
     alpha_true = result.get("alpha_true", result.get("alpha"))
     alpha_est = result.get("alpha_est", result.get("alpha"))
+    has_smooth = "u_smooth" in result
 
     st.caption(
         "Sanity check -- max element-wise difference between the closed-form "
@@ -262,11 +265,15 @@ def render_kalman_result(result):
     else:
         fig, axes = plt.subplots(2, 2, figsize=(13, 9))
 
+    filt_kwargs = dict(color="b", lw=1.5, alpha=0.7) if has_smooth else dict(color="b", lw=2, alpha=1.0)
+
     ax = axes[0, 0]
     ax.scatter(t, result["z_n"], c="gray", s=15, alpha=0.5, label="Noisy fluorescence measurements")
     ax.plot(t, alpha_true * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha_true * M_true)")
-    ax.plot(t, alpha_est * result["M_est"], "b-", lw=2, label="Filtered (alpha_est * M_est)")
-    ax.set_xlabel("Time")
+    ax.plot(t, alpha_est * result["M_est"], linestyle="-", label="Filtered (alpha_est * M_est)", **filt_kwargs)
+    if has_smooth:
+        ax.plot(t, alpha_est * result["M_smooth"], "r-", lw=1.5, label="Smoothed (alpha_est * M_smooth)")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Fluorescence")
     ax.set_title("Fluorescence: measured vs. reconstructed")
     ax.legend(fontsize=8)
@@ -274,8 +281,10 @@ def render_kalman_result(result):
 
     ax = axes[0, 1]
     ax.plot(t, result["true_I"], "g--", lw=1.5, label="True I(t)")
-    ax.plot(t, result["I_est"], "b-", lw=2, label="Filtered I(t)")
-    ax.set_xlabel("Time")
+    ax.plot(t, result["I_est"], linestyle="-", label="Filtered I(t)", **filt_kwargs)
+    if has_smooth:
+        ax.plot(t, result["I_smooth"], "r-", lw=1.5, label="Smoothed I(t)")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Immature protein I")
     ax.set_title("Immature protein pool")
     ax.legend(fontsize=8)
@@ -284,8 +293,10 @@ def render_kalman_result(result):
     if result["is_two_step"]:
         ax = axes[0, 2]
         ax.plot(t, result["true_X"], "g--", lw=1.5, label="True X(t)")
-        ax.plot(t, result["X_est"], "b-", lw=2, label="Filtered X(t)")
-        ax.set_xlabel("Time")
+        ax.plot(t, result["X_est"], linestyle="-", label="Filtered X(t)", **filt_kwargs)
+        if has_smooth:
+            ax.plot(t, result["X_smooth"], "r-", lw=1.5, label="Smoothed X(t)")
+        ax.set_xlabel("Time (min)")
         ax.set_ylabel("Intermediate protein X")
         ax.set_title("Intermediate protein pool")
         ax.legend(fontsize=8)
@@ -293,8 +304,10 @@ def render_kalman_result(result):
 
     ax = axes[1, 0]
     ax.plot(t, result["true_M"], "g--", lw=1.5, label="True M(t)")
-    ax.plot(t, result["M_est"], "b-", lw=2, label="Filtered M(t)")
-    ax.set_xlabel("Time")
+    ax.plot(t, result["M_est"], linestyle="-", label="Filtered M(t)", **filt_kwargs)
+    if has_smooth:
+        ax.plot(t, result["M_smooth"], "r-", lw=1.5, label="Smoothed M(t)")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Mature protein M")
     ax.set_title("Mature protein pool")
     ax.legend(fontsize=8)
@@ -302,8 +315,10 @@ def render_kalman_result(result):
 
     ax = axes[1, 1]
     ax.plot(t, result["true_u"], "g--", lw=1.5, label="True u(t) (gene expression)")
-    ax.plot(t, result["u_est"], "b-", lw=1.5, alpha=0.6, label="Filtered u(t)")
-    ax.set_xlabel("Time")
+    ax.plot(t, result["u_est"], linestyle="-", label="Filtered u(t)", **filt_kwargs)
+    if has_smooth:
+        ax.plot(t, result["u_smooth"], "r-", lw=1.5, label="Smoothed u(t)")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Synthesis rate u")
     ax.set_title("Reconstructed gene expression rate (the target)")
     ax.legend(fontsize=8)
@@ -314,6 +329,47 @@ def render_kalman_result(result):
 
     fig.tight_layout()
     st.pyplot(fig)
+
+    def _rmse(a, b):
+        return float(np.sqrt(np.mean((np.asarray(a) - np.asarray(b)) ** 2)))
+
+    st.markdown("**Comparative RMSE (filtered vs. smoothed, against ground truth)**")
+    rows = [
+        {
+            "Quantity": "Fluorescence",
+            "Filtered RMSE": _rmse(alpha_est * result["M_est"], alpha_true * result["true_M"]),
+            "Smoothed RMSE": (
+                _rmse(alpha_est * result["M_smooth"], alpha_true * result["true_M"]) if has_smooth else None
+            ),
+        },
+        {
+            "Quantity": "I(t)",
+            "Filtered RMSE": _rmse(result["I_est"], result["true_I"]),
+            "Smoothed RMSE": _rmse(result["I_smooth"], result["true_I"]) if has_smooth else None,
+        },
+    ]
+    if result["is_two_step"]:
+        rows.append({
+            "Quantity": "X(t)",
+            "Filtered RMSE": _rmse(result["X_est"], result["true_X"]),
+            "Smoothed RMSE": _rmse(result["X_smooth"], result["true_X"]) if has_smooth else None,
+        })
+    rows.append({
+        "Quantity": "M(t)",
+        "Filtered RMSE": _rmse(result["M_est"], result["true_M"]),
+        "Smoothed RMSE": _rmse(result["M_smooth"], result["true_M"]) if has_smooth else None,
+    })
+    rows.append({
+        "Quantity": "u(t) (gene expression)",
+        "Filtered RMSE": _rmse(result["u_est"], result["true_u"]),
+        "Smoothed RMSE": _rmse(result["u_smooth"], result["true_u"]) if has_smooth else None,
+    })
+
+    rmse_df = pd.DataFrame(rows).set_index("Quantity")
+    if not has_smooth:
+        st.caption("This run predates the RTS smoother -- only the filtered RMSE is available.")
+        rmse_df = rmse_df.drop(columns=["Smoothed RMSE"])
+    st.dataframe(rmse_df.style.format("{:.4f}"))
 
 
 def render_synthetic_expression_result(result):
@@ -335,7 +391,7 @@ def render_synthetic_expression_result(result):
     ax = axes[0, 0]
     ax.scatter(t, result["z_n"], c="gray", s=15, alpha=0.5, label="Noisy fluorescence measurements")
     ax.plot(t, alpha * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha * M_true)")
-    ax.set_xlabel("Time")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Fluorescence")
     ax.set_title("Fluorescence: true vs. noisy measurement")
     ax.legend(fontsize=8)
@@ -343,7 +399,7 @@ def render_synthetic_expression_result(result):
 
     ax = axes[0, 1]
     ax.plot(t, result["true_I"], "g--", lw=1.5, label="True I(t)")
-    ax.set_xlabel("Time")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Immature protein I")
     ax.set_title("Immature protein pool")
     ax.legend(fontsize=8)
@@ -352,7 +408,7 @@ def render_synthetic_expression_result(result):
     if result["is_two_step"]:
         ax = axes[0, 2]
         ax.plot(t, result["true_X"], "g--", lw=1.5, label="True X(t)")
-        ax.set_xlabel("Time")
+        ax.set_xlabel("Time (min)")
         ax.set_ylabel("Intermediate protein X")
         ax.set_title("Intermediate protein pool")
         ax.legend(fontsize=8)
@@ -360,7 +416,7 @@ def render_synthetic_expression_result(result):
 
     ax = axes[1, 0]
     ax.plot(t, result["true_M"], "g--", lw=1.5, label="True M(t)")
-    ax.set_xlabel("Time")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Mature protein M")
     ax.set_title("Mature protein pool")
     ax.legend(fontsize=8)
@@ -368,7 +424,7 @@ def render_synthetic_expression_result(result):
 
     ax = axes[1, 1]
     ax.plot(t, result["true_u"], "g--", lw=1.5, label="True u(t) (gene expression)")
-    ax.set_xlabel("Time")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("Synthesis rate u")
     ax.set_title("Gene expression signal (user-defined u(t))")
     ax.legend(fontsize=8)

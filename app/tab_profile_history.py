@@ -102,7 +102,7 @@ def render_profile_history_tab():
                 model_label = "2-step" if first_entry["fit_is_two_step"] else "1-step"
                 st.markdown(
                     f"Run {n} — {model_label} model, "
-                    f"t=[{first_entry['time_start']:.4g}, {first_entry['time_end']:.4g}] sec, "
+                    f"t=[{first_entry['time_start']:.4g}, {first_entry['time_end']:.4g}] min, "
                     f"baseline={first_entry['baseline']:.4g}, u={first_entry['u_step']:.4g}"
                 )
 

@@ -45,18 +45,18 @@ def render_variable_bleaching_tab():
         if is_two_step:
             k1 = st.number_input(
                 "k1 - rate I -> X", min_value=0.0, value=0.20, step=0.01, format="%.3f",
-                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.20.",
+                help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.20.",
                 key="vb_k1",
             )
             k2 = st.number_input(
                 "k2 - rate X -> M", min_value=0.0, value=0.10, step=0.01, format="%.3f",
-                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.10.",
+                help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.10.",
                 key="vb_k2",
             )
         else:
             km = st.number_input(
                 "km - rate I -> M", min_value=0.0, value=0.15, step=0.01, format="%.3f",
-                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.15.",
+                help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.15.",
                 key="vb_km",
             )
     with rc_cols[1]:
@@ -79,7 +79,7 @@ def render_variable_bleaching_tab():
     st.subheader("Simulation time")
     st_cols = st.columns(2)
     with st_cols[0]:
-        t_end = st.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0, key="vb_t_end")
+        t_end = st.number_input("End time (min)", min_value=1.0, value=60.0, step=10.0, key="vb_t_end")
     with st_cols[1]:
         n_points = st.number_input(
             "Number of time points", min_value=10, value=300, step=10, key="vb_n_points",
@@ -177,7 +177,7 @@ def render_variable_bleaching_tab():
             _, _, _, _, F = simulate_1step(t_eval, params, I0=ks["I0"], M0=ks["M0"], B0=ks["B0"])
         ax.plot(t_eval, F, label=ks["label"])
 
-    ax.set_xlabel("Time (sec)")
+    ax.set_xlabel("Time (min)")
     ax.set_ylabel("F = alpha * M (fluorescence)")
     ax.set_title(
         ("2-step" if is_two_step else "1-step")
@@ -303,7 +303,7 @@ def render_variable_bleaching_tab():
         fig_syn, ax_syn = plt.subplots(figsize=(9, 5))
         for sr in synthetic_results:
             ax_syn.plot(sr["t"], sr["F"], marker="o", markersize=2, linewidth=1, label=sr["label"])
-        ax_syn.set_xlabel("Time (sec)")
+        ax_syn.set_xlabel("Time (min)")
         ax_syn.set_ylabel("Mean intensity (synthetic)")
         ax_syn.set_title("Synthetic data across parameter sets")
         ax_syn.legend(fontsize=8)

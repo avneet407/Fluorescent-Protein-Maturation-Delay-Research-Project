@@ -37,28 +37,28 @@ def render_synthetic_expression_tab():
     with rc_cols[0]:
         if is_two_step:
             km1 = st.number_input(
-                "km1 - rate I -> X", min_value=0.0, value=0.20, step=0.01, format="%.3f",
+                "km1 - rate I -> X (/min)", min_value=0.0, value=0.20, step=0.01, format="%.3f",
                 key="synexpr_km1",
             )
         else:
             km = st.number_input(
-                "km - rate I -> M", min_value=0.0, value=0.15, step=0.01, format="%.3f",
+                "km - rate I -> M (/min)", min_value=0.0, value=0.15, step=0.01, format="%.3f",
                 key="synexpr_km",
             )
     with rc_cols[1]:
         if is_two_step:
             km2 = st.number_input(
-                "km2 - rate X -> M", min_value=0.0, value=0.10, step=0.01, format="%.3f",
+                "km2 - rate X -> M (/min)", min_value=0.0, value=0.10, step=0.01, format="%.3f",
                 key="synexpr_km2",
             )
     with rc_cols[2]:
         kb = st.number_input(
-            "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.03, step=0.005, format="%.4f",
+            "kb - photobleaching rate (M -> B) (/min)", min_value=0.0, value=0.03, step=0.005, format="%.4f",
             key="synexpr_kb",
         )
     with rc_cols[3]:
         kd = st.number_input(
-            "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
+            "kd - degradation / dilution rate (/min)", min_value=0.0, value=0.01, step=0.005, format="%.4f",
             key="synexpr_kd",
         )
 
@@ -71,7 +71,7 @@ def render_synthetic_expression_tab():
     noise_cols = st.columns(3)
     with noise_cols[0]:
         dt = st.number_input(
-            "dt - time between measurements", min_value=1e-6, value=5.0, step=0.5,
+            "dt - time between measurements (min)", min_value=1e-6, value=5.0, step=0.5,
             key="synexpr_dt",
         )
     with noise_cols[1]:

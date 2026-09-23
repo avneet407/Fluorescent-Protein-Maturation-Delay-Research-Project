@@ -72,28 +72,28 @@ def render_simulation_tab():
         if is_two_step:
             k1 = st.number_input(
                 "k1 - rate I -> X", min_value=0.0, value=0.20, step=0.01, format="%.3f",
-                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.20.",
+                help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.20.",
             )
         else:
             km = st.number_input(
                 "km - rate I -> M", min_value=0.0, value=0.15, step=0.01, format="%.3f",
-                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.15.",
+                help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.15.",
             )
     with rc_cols[1]:
         if is_two_step:
             k2 = st.number_input(
                 "k2 - rate X -> M", min_value=0.0, value=0.10, step=0.01, format="%.3f",
-                help="Suggested range: 0.05-0.5 /sec. Illustrative default: 0.10.",
+                help="Suggested range: 0.05-0.5 /min. Illustrative default: 0.10.",
             )
     with rc_cols[2]:
         kd = st.number_input(
             "kd - degradation / dilution rate", min_value=0.0, value=0.0, step=0.005, format="%.4f",
-            help="Suggested range: 0.001-0.05 /sec. Applies to all species. Default: 0 (growth halted).",
+            help="Suggested range: 0.001-0.05 /min. Applies to all species. Default: 0 (growth halted).",
         )
     with rc_cols[3]:
         kb = st.number_input(
             "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.02, step=0.005, format="%.4f",
-            help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02.",
+            help="Suggested range: 0.0-0.1 /min. Illustrative default: 0.02.",
         )
     with rc_cols[4]:
         u = st.number_input(
@@ -134,7 +134,7 @@ def render_simulation_tab():
     st.subheader("Simulation time")
     st_cols = st.columns(3)
     with st_cols[0]:
-        t_end = st.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0)
+        t_end = st.number_input("End time (min)", min_value=1.0, value=60.0, step=10.0)
     with st_cols[1]:
         n_points = st.number_input("Number of time points", min_value=10, value=300, step=10)
     with st_cols[2]:
@@ -199,7 +199,7 @@ def render_simulation_tab():
                     linewidth=2, color=SPECIES_COLORS["F"])
             ax.set_title("1-step maturation model")
 
-        ax.set_xlabel("Time (sec)")
+        ax.set_xlabel("Time (min)")
         ax.set_ylabel("Amount/ Mean Intensity")
         ax.legend()
         fig.tight_layout()

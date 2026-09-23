@@ -363,6 +363,7 @@ def delete_variable_bleaching_entry(index):
 _KALMAN_ARRAY_KEYS = (
     "t", "z_n", "true_I", "true_X", "true_M", "true_u",
     "I_est", "X_est", "M_est", "u_est",
+    "I_smooth", "X_smooth", "M_smooth", "u_smooth",
 )
 
 

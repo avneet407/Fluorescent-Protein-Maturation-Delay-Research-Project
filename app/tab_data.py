@@ -84,14 +84,14 @@ def render_data_tab(sim_state):
                         f"Found columns: {list(candidate.columns)}"
                     )
                 else:
-                    seconds_per_slice = st.number_input(
-                        "Time per slice (seconds)",
-                        min_value=0.0, value=60.0, step=1.0, format="%.3f",
+                    minutes_per_slice = st.number_input(
+                        "Time per slice (minutes)",
+                        min_value=0.0, value=1.0, step=0.1, format="%.3f",
                         help="Conversion factor from imaging slice/frame number to time. "
-                             "Suggested: 60 seconds per slice (adjust to match your "
-                             "acquisition interval).",
+                             "Suggested: 1 minute per slice (60 seconds; adjust to match "
+                             "your acquisition interval).",
                     )
-                    candidate["Time"] = candidate["Slice"] * seconds_per_slice
+                    candidate["Time"] = candidate["Slice"] * minutes_per_slice
                     data = candidate
                     data_label = uploaded_file.name
         else:
@@ -209,7 +209,7 @@ def render_data_tab(sim_state):
     if data is not None:
         fig2, ax2 = plt.subplots(figsize=(9, 5))
         ax2.plot(data["Time"], data["Mean"], marker="o", markersize=3)
-        ax2.set_xlabel("Time (sec)")
+        ax2.set_xlabel("Time (min)")
         ax2.set_ylabel("Mean intensity")
         ax2.set_title(data_label)
         fig2.tight_layout()

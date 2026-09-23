@@ -21,10 +21,11 @@ import numpy as np
 from Maturation_Models import simulate_1step, simulate_2step
 
 EXPRESSION_HELP = (
-    "A formula in `t` (time), e.g. `5 + 3*sin(2*pi*t/300*2)`. Allowed: `t`, "
-    "`pi`, `e`, the functions `sin`, `cos`, `tan`, `exp`, `log`, `log10`, "
-    "`sqrt`, `abs`, `sign`, `min`, `max`, and `+ - * / ** %` with "
-    "parentheses. No other names or function calls are allowed."
+    "A formula in `t` (time, in minutes), e.g. `5 + 3*sin(2*pi*t/300*2)`. "
+    "Allowed: `t`, `pi`, `e`, the functions `sin`, `cos`, `tan`, `exp`, "
+    "`log`, `log10`, `sqrt`, `abs`, `sign`, `min`, `max`, and "
+    "`+ - * / ** %` with parentheses. No other names or function calls "
+    "are allowed."
 )
 
 _ALLOWED_NAMES = {

@@ -51,7 +51,7 @@ def render_fitting_tab():
                 col1, col2 = st.columns(2)
                 with col1:
                     time_start, time_end = st.slider(
-                        "Fitting region (Time range, sec)",
+                        "Fitting region (Time range, min)",
                         min_value=time_min, max_value=time_max,
                         value=(time_min, time_max),
                         help="Suggested: the region where fluorescence rises smoothly, "
@@ -354,7 +354,7 @@ def render_fitting_tab():
                             label=("2-step model fit" if fsr["is_two_step"] else "1-step model fit"),
                         )
                         ax3.set_title(fsr["title"])
-                        ax3.set_xlabel("Time (sec)")
+                        ax3.set_xlabel("Time (min)")
                         ax3.set_ylabel("Mean intensity")
                         ax3.legend()
                         fig3.tight_layout()

@@ -89,12 +89,16 @@ its own.
 - `render_profile_2d_result(profile_df)` — renders the 2D (a, b) SSE
   contour plot + raw data table.
 - `render_kalman_result(result)` — renders a Kalman filter run's plots (2x2
-  grid for 1-step: F, I, M, u; 2x3 for 2-step: F, I, X, M, u, blank) plus
-  the F-vs-`expm(A*dt)` sanity-check caption. "True" curves use
-  `alpha_true` (falls back to a legacy single `alpha` key for history
-  entries saved before the true/estimated split existed); "Filtered"
-  curves use `alpha_est`. Shared by the Kalman Filter tab and its history
-  tab.
+  grid for 1-step: F, I, M, u; 2x3 for 2-step: F, I, X, M, u, blank),
+  overlaying true/filtered/RTS-smoothed curves on each, plus the
+  F-vs-`expm(A*dt)` sanity-check caption and a comparative RMSE table
+  (filtered vs. smoothed against ground truth, one row per quantity). "True"
+  curves use `alpha_true` (falls back to a legacy single `alpha` key for
+  history entries saved before the true/estimated split existed);
+  "Filtered"/"Smoothed" curves use `alpha_est`. Smoothed curves/RMSE column
+  are omitted (with an explanatory caption) for history entries saved
+  before the RTS smoother existed (detected via a missing `u_smooth` key).
+  Shared by the Kalman Filter tab and its history tab.
 - `render_synthetic_expression_result(result)` — renders a Synthetic Gene
   Expression run's ground-truth plots (same 2x2/2x3 layout as
   `render_kalman_result`, but with only true/noisy-measurement curves, no
@@ -290,24 +294,26 @@ never exactly what a fit recovers.
 ### app/tab_kalman.py — Kalman Filter tab
 
 Ports `Kalman_Filter/1-step_Kalman_Filter.py` and
-`Kalman_Filter/2-step_Kalman_Filter.py` into the UI: user enters
-*estimated* rate constants (e.g. from Least Squares Fitting), alpha,
-process noise, and the filter's assumed measurement noise `sigma_F`, then
-filters the noisy trace generated in the Synthetic Gene Expression tab
-(model type, `dt`, and the trace itself all come from there, not
-re-entered here) -- instead of the scripts' hard-coded constants and
-self-generated synthetic data.
+`Kalman_Filter/2-step_Kalman_Filter.py` (including their RTS smoother) into
+the UI: user enters *estimated* rate constants (e.g. from Least Squares
+Fitting), alpha, process noise, and the filter's assumed measurement noise
+`sigma_F`, then filters the noisy trace generated in the Synthetic Gene
+Expression tab (model type, `dt`, and the trace itself all come from
+there, not re-entered here) -- instead of the scripts' hard-coded
+constants and self-generated synthetic data.
 
 - `render_kalman_tab()` — reads
   `st.session_state["synthetic_expression_result"]` (shows an info message
   if absent); renders the estimated rate constant/alpha/process-noise/
   assumed-sigma_F inputs; on **Run Kalman Filter** calls
   `Kalman_Filter_Model.run_kalman_1step`/`run_kalman_2step` against the
-  synthetic tab's noisy trace, merges its `I_est`/`M_est`/(`X_est`)/`u_est`
-  with that tab's `true_I`/`true_M`/(`true_X`)/`true_u`/`z_n` into one
-  result dict (`alpha_true` from the synthetic tab, `alpha_est` from this
-  tab's own input), renders it via `render_kalman_result`, and appends it
-  to history via `history_store.append_kalman_entry`. Writes
+  synthetic tab's noisy trace, merges its filtered/smoothed output
+  (`I_est`/`M_est`/(`X_est`)/`u_est`, `I_smooth`/`M_smooth`/(`X_smooth`)/
+  `u_smooth`) with that tab's `true_I`/`true_M`/(`true_X`)/`true_u`/`z_n`
+  into one result dict (`alpha_true` from the synthetic tab, `alpha_est`
+  from this tab's own input), renders it via `render_kalman_result`
+  (which also shows the comparative filtered-vs-smoothed RMSE table), and
+  appends it to history via `history_store.append_kalman_entry`. Writes
   `st.session_state["kalman_result"]`.
 
 ### app/tab_kalman_history.py — Kalman Filter History tab
@@ -534,14 +540,15 @@ Expression tab.
 
 ### Kalman_Filter_Model.py
 
-Kalman filter for the 1-step and 2-step maturation models, factored out of
-`Kalman_Filter/1-step_Kalman_Filter.py`/`2-step_Kalman_Filter.py` into
-reusable functions so the Kalman Filter tab can run the same math with
-user-supplied parameters instead of the scripts' hard-coded constants. `u`
-is modelled as a random walk (driven only by process noise `qu`), appended
-to the maturation-pathway state vector. Filter-only: it does not generate
-ground truth or noisy measurements itself (that's `synthetic_expression.py`,
-used by the separate Synthetic Gene Expression tab) -- it just filters
+Kalman filter + RTS smoother for the 1-step and 2-step maturation models,
+factored out of `Kalman_Filter/1-step_Kalman_Filter.py`/
+`2-step_Kalman_Filter.py` into reusable functions so the Kalman Filter tab
+can run the same math with user-supplied parameters instead of the
+scripts' hard-coded constants. `u` is modelled as a random walk (driven
+only by process noise `qu`), appended to the maturation-pathway state
+vector. Filter-only: it does not generate ground truth or noisy
+measurements itself (that's `synthetic_expression.py`, used by the
+separate Synthetic Gene Expression tab) -- it just filters/smooths
 whatever noisy trace it's given, using its own (potentially different,
 e.g. least-squares-calibrated) rate constants. Used by the Kalman Filter
 tab.
@@ -554,16 +561,29 @@ tab.
   for the 2-step `[I, X, M, u]` state space; falls back to `expm(A*dt)`
   when any two of the three poles coincide (several removable
   singularities would otherwise need separate limiting cases).
+- `_run_filter_loop(F, H, Q, R, z_n, n_states)` — forward Kalman filter
+  pass; besides the filtered estimates (`x_est_all`, x_{n|n}) also returns
+  the per-step posterior covariance (`P_est_all`) and the prior
+  state/covariance each step predicted from (`x_pred_all`/`P_pred_all`,
+  x_{n|n-1}/P_{n|n-1}) -- both needed by `_rts_smoother`.
+- `_rts_smoother(F, x_est_all, P_est_all, x_pred_all, P_pred_all)` —
+  backward Rauch-Tung-Striebel smoother pass: revisits every step using the
+  *whole* trace (not just measurements up to that point), strictly more
+  accurate than the forward filter at every interior point, via the
+  smoother gain `C_n = P_{n|n} F^T (P_{n+1|n})^{-1}` (solved with
+  `np.linalg.solve` rather than an explicit inverse, for numerical
+  stability). Only computable after the run finishes, not causally.
 - `run_kalman_1step(z_n, params)` / `run_kalman_2step(z_n, params)` —
   filter an externally supplied noisy trace `z_n` (e.g. from
   `synthetic_expression.py` + measurement noise): build `F`/`H`/`Q`/`R`
   from `params` (`sigma_F` is the filter's *assumed* measurement noise std,
   used for `R` -- may differ from whatever noise std actually generated
-  `z_n`), run the filter loop, and return a result dict (`I_est`/`M_est`/
-  (`X_est`)/`u_est`, `max_F_diff`). Raises `ValueError` if any pole
-  (`km+kd`, `kb+kd`, etc.) is not `> 0`, since the closed-form `F` entries
-  divide by it — a real risk once these are free-form UI inputs rather
-  than the scripts' hard-coded nonzero constants.
+  `z_n`), run the filter loop then the RTS smoother over its output, and
+  return a result dict (`I_est`/`M_est`/(`X_est`)/`u_est`, `I_smooth`/
+  `M_smooth`/(`X_smooth`)/`u_smooth`, `max_F_diff`). Raises `ValueError` if
+  any pole (`km+kd`, `kb+kd`, etc.) is not `> 0`, since the closed-form `F`
+  entries divide by it — a real risk once these are free-form UI inputs
+  rather than the scripts' hard-coded nonzero constants.
 
 ### history_store.py
 
@@ -595,9 +615,11 @@ record ↔ entry converters (DataFrame/ndarray ⇄ JSON-safe dict).
   `params` dict (the tab's *estimated* rate constants) plus the full
   `result` dict, which also carries the Synthetic Gene Expression tab's
   ground truth (`true_I`/`true_M`/etc., `alpha_true`) alongside the
-  filter's own output (`I_est`/`M_est`/etc., `alpha_est`). Trajectories are
-  restored as ndarrays on load, not left as plain JSON lists, since
-  `render_kalman_result` does arithmetic like `alpha_true * true_M` on
+  filter's forward-pass output (`I_est`/`M_est`/etc., `alpha_est`) and RTS
+  smoother output (`I_smooth`/`M_smooth`/etc.; absent in entries saved
+  before the smoother existed). Trajectories are restored as ndarrays on
+  load, not left as plain JSON lists, since `render_kalman_result` does
+  arithmetic like `alpha_true * true_M` on
   them.
 
 ## Data files (not code)
@@ -627,10 +649,11 @@ restarts.
   `shared_true`/`shared_fitted`/`per_trace_rows`).
 - **kalman_history.json** — one record per Kalman filter run from the
   Kalman Filter tab: the input `params` dict (estimated rate constants)
-  and the full `result` dict (state/measurement trajectories as plain
-  lists, `is_two_step`/`alpha_true`/`alpha_est`/`max_F_diff` as scalars;
-  older entries saved before the true/estimated split have a single
-  `alpha` scalar instead).
+  and the full `result` dict (state/measurement trajectories, including
+  RTS-smoothed ones (`I_smooth`/etc.), as plain lists;
+  `is_two_step`/`alpha_true`/`alpha_est`/`max_F_diff` as scalars; older
+  entries have a single `alpha` scalar instead of `alpha_true`/`alpha_est`,
+  and lack the smoothed trajectories entirely, from before those existed).
 
 ## requirements.txt
 

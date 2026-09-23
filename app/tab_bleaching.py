@@ -112,14 +112,14 @@ def render_bleaching_tab():
     with bleach_rc_cols[0]:
         kb_bleach = st.number_input(
             "kb - photobleaching rate (M -> B)", min_value=0.0, step=0.005, format="%.4f",
-            help="Suggested range: 0.0-0.1 /sec. Illustrative default: 0.02. Synced from the "
+            help="Suggested range: 0.0-0.1 /min. Illustrative default: 0.02. Synced from the "
                  "Simulation tab's kb after a run, but can be overridden here.",
             key="bleach_kb",
         )
     with bleach_rc_cols[1]:
         kd_bleach = st.number_input(
             "kd - degradation / dilution rate", min_value=0.0, step=0.005, format="%.4f",
-            help="Suggested range: 0.001-0.05 /sec. Default: 0 (growth halted). Synced from the "
+            help="Suggested range: 0.001-0.05 /min. Default: 0 (growth halted). Synced from the "
                  "Simulation tab's kd after a run, but can be overridden here.",
             key="bleach_kd",
         )
@@ -140,7 +140,7 @@ def render_bleaching_tab():
 
     bleach_st_cols = st.columns(3)
     with bleach_st_cols[0]:
-        t_end_bleach = st.number_input("End time (sec)", min_value=1.0, value=60.0, step=10.0, key="bleach_t_end")
+        t_end_bleach = st.number_input("End time (min)", min_value=1.0, value=60.0, step=10.0, key="bleach_t_end")
     with bleach_st_cols[1]:
         n_points_bleach = st.number_input(
             "Number of time points", min_value=10, value=300, step=10, key="bleach_n_points"
@@ -174,7 +174,7 @@ def render_bleaching_tab():
         ax_b.plot(bleach_sim["t"], bleach_sim["B"], label="B (bleached)", color=SPECIES_COLORS["B"])
         ax_b.plot(bleach_sim["t"], bleach_sim["F"], "--", label="F = alpha * M (fluorescence)",
                   linewidth=2, color=SPECIES_COLORS["F"])
-        ax_b.set_xlabel("Time (sec)")
+        ax_b.set_xlabel("Time (min)")
         ax_b.set_ylabel("Amount / Mean Intensity")
         ax_b.set_title("Bleaching-only model (I(t) ~ 0)")
         ax_b.legend()
@@ -257,7 +257,7 @@ def render_bleaching_tab():
         else:
             fig_syn_b, ax_syn_b = plt.subplots(figsize=(9, 5))
             ax_syn_b.plot(bleach_synth["t"], bleach_synth["F"], marker="o", markersize=3)
-            ax_syn_b.set_xlabel("Time (sec)")
+            ax_syn_b.set_xlabel("Time (min)")
             ax_syn_b.set_ylabel("Mean intensity")
             ax_syn_b.set_title("Synthetic data")
             fig_syn_b.tight_layout()

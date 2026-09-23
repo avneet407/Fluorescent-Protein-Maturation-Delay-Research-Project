@@ -1,12 +1,14 @@
 # --- Kalman Filter tab: reconstruct I/(X)/M/u from a noisy fluorescence trace
-# Ports Kalman_Filter/1-step_Kalman_Filter.py and 2-step_Kalman_Filter.py:
-# user enters calibrated ("estimated") rate constants (e.g. obtained from
-# Least Squares Fitting), alpha, process noise, and the filter's assumed
-# measurement noise sigma_F. Filters the noisy trace generated in the
-# **Synthetic Gene Expression** tab (its own, possibly different, "true"
-# rate constants and u(t) formula produce that trace); this tab's plots
-# compare the filter's reconstruction (from the estimated rate constants
-# here) against that tab's ground truth. Every run is saved to the Kalman
+# Ports Kalman_Filter/1-step_Kalman_Filter.py and 2-step_Kalman_Filter.py
+# (including their RTS smoother): user enters calibrated ("estimated") rate
+# constants (e.g. obtained from Least Squares Fitting), alpha, process
+# noise, and the filter's assumed measurement noise sigma_F. Filters the
+# noisy trace generated in the **Synthetic Gene Expression** tab (its own,
+# possibly different, "true" rate constants and u(t) formula produce that
+# trace); this tab's plots compare the forward filter's and the backward
+# RTS smoother's reconstructions (from the estimated rate constants here)
+# against that tab's ground truth, plus a comparative RMSE table for both
+# against every reconstructed quantity. Every run is saved to the Kalman
 # Filter History tab (kalman_history.json).
 
 from datetime import datetime
@@ -21,15 +23,18 @@ from app.shared import render_kalman_result
 
 def render_kalman_tab():
     st.markdown(
-        "Runs a Kalman filter over the noisy fluorescence trace generated in "
-        "the **Synthetic Gene Expression** tab, to reconstruct the "
-        "immature/(intermediate)/mature protein pools and the underlying "
-        "gene expression rate u(t), given *estimated* rate constants (e.g. "
-        "from **Least Squares Fitting**) -- which may differ from that "
-        "tab's *true* rate constants used to generate the trace. u is "
-        "modelled as a random walk driven by process noise `qu`, not fit "
-        "directly -- its reconstructed trajectory is the Kalman filter's "
-        "main output."
+        "Runs a Kalman filter (forward pass) plus an RTS smoother (backward "
+        "pass, using the whole trace including future measurements -- more "
+        "accurate, but only computable after the run finishes) over the "
+        "noisy fluorescence trace generated in the **Synthetic Gene "
+        "Expression** tab, to reconstruct the immature/(intermediate)/mature "
+        "protein pools and the underlying gene expression rate u(t), given "
+        "*estimated* rate constants (e.g. from **Least Squares Fitting**) "
+        "-- which may differ from that tab's *true* rate constants used to "
+        "generate the trace. u is modelled as a random walk driven by "
+        "process noise `qu`, not fit directly -- its reconstructed "
+        "trajectory is the main output, and typically benefits the most "
+        "from smoothing."
     )
 
     synth = st.session_state.get("synthetic_expression_result")
@@ -44,7 +49,7 @@ def render_kalman_tab():
     st.caption(
         f"Filtering the {'2-step' if is_two_step else '1-step'} trace "
         f"generated in **Synthetic Gene Expression** "
-        f"(n_steps={synth['n_steps']}, dt={synth['dt']:.4g}, "
+        f"(n_steps={synth['n_steps']}, dt={synth['dt']:.4g} min, "
         f"u(t) = `{synth['u_expr']}`)."
     )
 
@@ -53,28 +58,28 @@ def render_kalman_tab():
     with rc_cols[0]:
         if is_two_step:
             km1 = st.number_input(
-                "km1 - rate I -> X", min_value=0.0, value=0.20, step=0.01, format="%.3f",
+                "km1 - rate I -> X (/min)", min_value=0.0, value=0.20, step=0.01, format="%.3f",
                 key="kalman_km1",
             )
         else:
             km = st.number_input(
-                "km - rate I -> M", min_value=0.0, value=0.15, step=0.01, format="%.3f",
+                "km - rate I -> M (/min)", min_value=0.0, value=0.15, step=0.01, format="%.3f",
                 key="kalman_km",
             )
     with rc_cols[1]:
         if is_two_step:
             km2 = st.number_input(
-                "km2 - rate X -> M", min_value=0.0, value=0.10, step=0.01, format="%.3f",
+                "km2 - rate X -> M (/min)", min_value=0.0, value=0.10, step=0.01, format="%.3f",
                 key="kalman_km2",
             )
     with rc_cols[2]:
         kb = st.number_input(
-            "kb - photobleaching rate (M -> B)", min_value=0.0, value=0.03, step=0.005, format="%.4f",
+            "kb - photobleaching rate (M -> B) (/min)", min_value=0.0, value=0.03, step=0.005, format="%.4f",
             key="kalman_kb",
         )
     with rc_cols[3]:
         kd = st.number_input(
-            "kd - degradation / dilution rate", min_value=0.0, value=0.01, step=0.005, format="%.4f",
+            "kd - degradation / dilution rate (/min)", min_value=0.0, value=0.01, step=0.005, format="%.4f",
             key="kalman_kd",
         )
 

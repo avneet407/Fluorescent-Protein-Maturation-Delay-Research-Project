@@ -174,8 +174,8 @@ def render_bode_tab():
         summary_rows.append({
             "Label": ps["label"],
             "Model": "2-step" if ps["is_two_step"] else "1-step",
-            "Numerical cutoff (rad/s)": wc_numerical,
-            "Analytical cutoff (rad/s)": wc_analytical,
+            "Numerical cutoff (rad/min)": wc_numerical,
+            "Analytical cutoff (rad/min)": wc_analytical,
         })
 
     ax_mag.legend(fontsize=8)

@@ -58,7 +58,7 @@ def render_kalman_history_tab():
         with st.container(border=True):
             st.markdown(
                 f"**Run {i + 1}** -- {entry['timestamp']} -- {model_choice} model, "
-                f"dt={params.get('dt'):.4g}, n_steps={n_steps}, "
+                f"dt={params.get('dt'):.4g} min, n_steps={n_steps}, "
                 f"alpha={params.get('alpha'):.4g}, sigma_F={params.get('sigma_F'):.4g}"
             )
             hist_col1, hist_col2 = st.columns([1, 1])
