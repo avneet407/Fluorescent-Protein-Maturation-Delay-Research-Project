@@ -17,7 +17,7 @@ from history_store import (
     delete_variable_bleaching_entry,
 )
 
-from multi_start_plots import plot_histograms
+from Parameter_Identification.multi_start_plots import plot_histograms
 
 
 def _render_multi_start_entry(entry, index):

@@ -15,7 +15,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from Kalman_Filter_Model import run_kalman_1step, run_kalman_2step
+from Kalman_Filter.Kalman_Filter_Model import run_kalman_1step, run_kalman_2step
 from history_store import append_kalman_entry
 
 from app.shared import render_kalman_result

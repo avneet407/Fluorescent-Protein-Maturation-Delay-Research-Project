@@ -24,8 +24,8 @@ same as before.
 
 The plain-Python model/fitting/plotting logic lives in the sibling modules
 imported by the `app/` tab modules (Maturation_Models.py,
-Bleaching_Only_Model.py, Kalman_Filter_Model.py, etc.) and has no Streamlit
-dependency.
+Bleaching_Only_Model.py, Kalman_Filter/Kalman_Filter_Model.py, etc.) and has
+no Streamlit dependency.
 """
 
 import streamlit as st

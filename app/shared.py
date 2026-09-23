@@ -10,8 +10,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from multi_start_plots import plot_histograms
-from profile_likelihood_2D import plot_profile_2d
+from Parameter_Identification.multi_start_plots import plot_histograms
+from Parameter_Identification.profile_likelihood_2D import plot_profile_2d
 
 # Transfer-function formulas (production input u -> fluorescence F) shown
 # alongside every Bode plot in the UI, matching bode_plot.py's

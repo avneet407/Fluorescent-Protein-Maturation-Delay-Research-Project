@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 
-from multi_start_fit import sample_initial_guess
+from Parameter_Identification.multi_start_fit import sample_initial_guess
 
 # Derived-quantity formulas, keyed by `fit_is_two_step`, then by quantity name.
 # Each formula takes a dict of {raw_param_name: value} and returns the derived value.
@@ -42,8 +42,8 @@ DERIVED_QUANTITY_FORMULAS = {
         "G*I0": lambda p: p["alpha"] * p["km"] * p["I0"],
     },
     True: {
-        "a": lambda p: p["k1"] + p["kd"],
-        "c": lambda p: p["k2"] + p["kd"],
+        "a1": lambda p: p["k1"] + p["kd"],
+        "a2": lambda p: p["k2"] + p["kd"],
         "b": lambda p: p["kb"] + p["kd"],
         "G3": lambda p: p["alpha"] * p["k1"] * p["k2"],
         "G3*I0": lambda p: p["alpha"] * p["k1"] * p["k2"] * p["I0"],
@@ -61,8 +61,8 @@ DERIVED_QUANTITY_REPARAM = {
         "G*I0": ("I0", lambda free, target: target / (free["alpha"] * free["km"])),
     },
     True: {
-        "a": ("kd", lambda free, target: target - free["k1"]),
-        "c": ("kd", lambda free, target: target - free["k2"]),
+        "a1": ("kd", lambda free, target: target - free["k1"]),
+        "a2": ("kd", lambda free, target: target - free["k2"]),
         "b": ("kd", lambda free, target: target - free["kb"]),
         "G3": ("k2", lambda free, target: target / (free["alpha"] * free["k1"])),
         "G3*I0": ("I0", lambda free, target: target / (free["alpha"] * free["k1"] * free["k2"])),

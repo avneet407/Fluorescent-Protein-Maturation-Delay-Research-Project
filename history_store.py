@@ -1,10 +1,10 @@
 """Disk persistence for run history: multi-start least-squares fits and
 profile likelihood sweeps.
 
-Each kind is stored as JSON records in its own local file next to this
-module, so past runs survive app/browser restarts — unlike
-`st.session_state`, which resets whenever the Streamlit process restarts or
-the session ends.
+Each kind is stored as JSON records in its own file under the section
+folder it belongs to (Parameter_Identification/ or Kalman_Filter/), so past
+runs survive app/browser restarts — unlike `st.session_state`, which resets
+whenever the Streamlit process restarts or the session ends.
 """
 
 import json
@@ -14,11 +14,13 @@ import numpy as np
 import pandas as pd
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-MULTI_START_HISTORY_FILE = os.path.join(MODULE_DIR, "multi_start_history.json")
-PROFILE_HISTORY_FILE = os.path.join(MODULE_DIR, "profile_likelihood_history.json")
-BLEACH_HISTORY_FILE = os.path.join(MODULE_DIR, "bleach_fit_history.json")
-VARIABLE_BLEACH_HISTORY_FILE = os.path.join(MODULE_DIR, "variable_bleaching_history.json")
-KALMAN_HISTORY_FILE = os.path.join(MODULE_DIR, "kalman_history.json")
+PARAMETER_IDENTIFICATION_DIR = os.path.join(MODULE_DIR, "Parameter_Identification")
+KALMAN_FILTER_DIR = os.path.join(MODULE_DIR, "Kalman_Filter")
+MULTI_START_HISTORY_FILE = os.path.join(PARAMETER_IDENTIFICATION_DIR, "multi_start_history.json")
+PROFILE_HISTORY_FILE = os.path.join(PARAMETER_IDENTIFICATION_DIR, "profile_likelihood_history.json")
+BLEACH_HISTORY_FILE = os.path.join(PARAMETER_IDENTIFICATION_DIR, "bleach_fit_history.json")
+VARIABLE_BLEACH_HISTORY_FILE = os.path.join(PARAMETER_IDENTIFICATION_DIR, "variable_bleaching_history.json")
+KALMAN_HISTORY_FILE = os.path.join(KALMAN_FILTER_DIR, "kalman_history.json")
 
 
 def _load_records(path):

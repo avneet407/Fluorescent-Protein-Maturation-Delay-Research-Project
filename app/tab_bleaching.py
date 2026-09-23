@@ -13,14 +13,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from Bleaching_Only_Model import simulate_bleach, residuals_bleach
-from Maturation_Model_Known_Bleaching_Pole import (
+from Parameter_Identification.Bleaching_Only_Model import simulate_bleach, residuals_bleach
+from Parameter_Identification.Maturation_Model_Known_Bleaching_Pole import (
     residuals_1step_known_b,
     residuals_2step_known_b,
 )
 from gaussian_noise import simulate_bleach_noisy, add_measurement_noise
-from multi_start_fit import run_multi_start
-from multi_start_plots import plot_histograms
+from Parameter_Identification.multi_start_fit import run_multi_start
+from Parameter_Identification.multi_start_plots import plot_histograms
 from history_store import append_bleach_entry
 
 from app.shared import render_multi_start_results
@@ -473,17 +473,17 @@ def render_bleaching_tab():
                 )
 
             if fit_is_two_step_kb:
-                results_df_kb["a"] = results_df_kb["k1"]  # kd fixed at 0
-                results_df_kb["c"] = results_df_kb["k2"]  # kd fixed at 0
-                derived_names_kb = ["a", "c", "K"]
+                results_df_kb["a1"] = results_df_kb["k1"]  # kd fixed at 0
+                results_df_kb["a2"] = results_df_kb["k2"]  # kd fixed at 0
+                derived_names_kb = ["a1", "a2", "K"]
             else:
                 results_df_kb["a"] = results_df_kb["km"]  # kd fixed at 0
                 derived_names_kb = ["a", "K"]
 
             true_values_kb = {}
             if fit_is_two_step_kb:
-                true_values_kb["a"] = synthetic_params_kb["k1"] + synthetic_params_kb["kd"]
-                true_values_kb["c"] = synthetic_params_kb["k2"] + synthetic_params_kb["kd"]
+                true_values_kb["a1"] = synthetic_params_kb["k1"] + synthetic_params_kb["kd"]
+                true_values_kb["a2"] = synthetic_params_kb["k2"] + synthetic_params_kb["kd"]
                 true_values_kb["K"] = K_true_kb
             else:
                 true_values_kb["a"] = synthetic_params_kb["km"] + synthetic_params_kb["kd"]

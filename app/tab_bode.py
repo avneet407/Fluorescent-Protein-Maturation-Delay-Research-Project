@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from bode_plot import (
+from Parameter_Identification.bode_plot import (
     bode_1step,
     bode_2step,
     analytical_cutoff_1step,

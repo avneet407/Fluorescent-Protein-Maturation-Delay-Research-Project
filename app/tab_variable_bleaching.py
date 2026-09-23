@@ -14,9 +14,9 @@ import streamlit as st
 
 from Maturation_Models import simulate_1step, simulate_2step
 from gaussian_noise import simulate_1step_noisy, simulate_2step_noisy, add_measurement_noise
-from variable_bleaching_fit import residuals_1step_shared_km, residuals_2step_shared_k
-from multi_start_fit import run_multi_start
-from multi_start_plots import plot_histograms
+from Parameter_Identification.variable_bleaching_fit import residuals_1step_shared_km, residuals_2step_shared_k
+from Parameter_Identification.multi_start_fit import run_multi_start
+from Parameter_Identification.multi_start_plots import plot_histograms
 from history_store import append_variable_bleaching_entry
 
 

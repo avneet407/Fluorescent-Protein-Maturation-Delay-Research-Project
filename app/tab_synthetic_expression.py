@@ -8,7 +8,7 @@
 
 import streamlit as st
 
-from synthetic_expression import simulate_true_1step, simulate_true_2step, EXPRESSION_HELP
+from Kalman_Filter.synthetic_expression import simulate_true_1step, simulate_true_2step, EXPRESSION_HELP
 from gaussian_noise import add_measurement_noise
 
 from app.shared import render_synthetic_expression_result

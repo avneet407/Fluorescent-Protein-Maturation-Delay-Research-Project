@@ -19,7 +19,7 @@ from Maturation_Models import (
     residuals_1step,
     residuals_2step,
 )
-from multi_start_fit import run_multi_start
+from Parameter_Identification.multi_start_fit import run_multi_start
 from history_store import append_multi_start_entry
 
 from app.shared import render_multi_start_results
@@ -284,21 +284,21 @@ def render_fitting_tab():
                             and synthetic_params is not None
                             and synthetic_params["is_two_step"]
                         ):
-                            a_true = synthetic_params["k1"] + synthetic_params["kd"]
-                            c_true = synthetic_params["k2"] + synthetic_params["kd"]
+                            a1_true = synthetic_params["k1"] + synthetic_params["kd"]
+                            a2_true = synthetic_params["k2"] + synthetic_params["kd"]
                             b_true = synthetic_params["kb"] + synthetic_params["kd"]
                             G3_true = synthetic_params["alpha"] * synthetic_params["k1"] * synthetic_params["k2"]
 
-                            a_fit = k1_hat + kd_hat
-                            c_fit = k2_hat + kd_hat
+                            a1_fit = k1_hat + kd_hat
+                            a2_fit = k2_hat + kd_hat
                             b_fit = kb_hat + kd_hat
                             G3_fit = alpha_hat * k1_hat * k2_hat
 
                             comparison_df = pd.DataFrame(
                                 {
-                                    "Quantity": ["a = k1 + kd", "c = k2 + kd", "b = kb + kd", "G3 = alpha * k1 * k2"],
-                                    "Synthetic input": [a_true, c_true, b_true, G3_true],
-                                    "Least-squares output": [a_fit, c_fit, b_fit, G3_fit],
+                                    "Quantity": ["a1 = k1 + kd", "a2 = k2 + kd", "b = kb + kd", "G3 = alpha * k1 * k2"],
+                                    "Synthetic input": [a1_true, a2_true, b_true, G3_true],
+                                    "Least-squares output": [a1_fit, a2_fit, b_fit, G3_fit],
                                 }
                             )
 
@@ -410,12 +410,12 @@ def render_fitting_tab():
                             )
 
                         if fit_is_two_step:
-                            results_df["a"] = results_df["k1"] + results_df["kd"]
-                            results_df["c"] = results_df["k2"] + results_df["kd"]
+                            results_df["a1"] = results_df["k1"] + results_df["kd"]
+                            results_df["a2"] = results_df["k2"] + results_df["kd"]
                             results_df["b"] = results_df["kb"] + results_df["kd"]
                             results_df["G3"] = results_df["alpha"] * results_df["k1"] * results_df["k2"]
                             results_df["G3*I0"] = results_df["G3"] * results_df["I0"]
-                            derived_names = ["a", "c", "b", "G3", "G3*I0"]
+                            derived_names = ["a1", "a2", "b", "G3", "G3*I0"]
                         else:
                             results_df["a"] = results_df["km"] + results_df["kd"]
                             results_df["b"] = results_df["kb"] + results_df["kd"]
@@ -438,8 +438,8 @@ def render_fitting_tab():
                             if fit_is_two_step:
                                 true_values["k1"] = synthetic_params_multi["k1"]
                                 true_values["k2"] = synthetic_params_multi["k2"]
-                                true_values["a"] = true_values["k1"] + true_values["kd"]
-                                true_values["c"] = true_values["k2"] + true_values["kd"]
+                                true_values["a1"] = true_values["k1"] + true_values["kd"]
+                                true_values["a2"] = true_values["k2"] + true_values["kd"]
                                 true_values["b"] = true_values["kb"] + true_values["kd"]
                                 true_values["G3"] = (
                                     true_values["alpha"] * true_values["k1"] * true_values["k2"]

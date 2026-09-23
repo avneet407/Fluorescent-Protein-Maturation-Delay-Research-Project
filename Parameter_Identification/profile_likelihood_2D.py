@@ -29,7 +29,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
 
-from multi_start_fit import sample_initial_guess
+from Parameter_Identification.multi_start_fit import sample_initial_guess
 
 
 def _clip_to_bounds(x0, bounds, eps=1e-9):

@@ -109,14 +109,14 @@ def render_simulation_tab():
 
     st.subheader("Derived parameters")
     if is_two_step:
-        a_val = k1 + kd
-        c_val = k2 + kd
+        a1_val = k1 + kd
+        a2_val = k2 + kd
         b_val = kb + kd
         G3_val = alpha * k1 * k2
         G3I0_val = G3_val * I0
         dp_cols = st.columns(5)
-        dp_cols[0].metric("a = k1 + kd", f"{a_val:.4f}")
-        dp_cols[1].metric("c = k2 + kd", f"{c_val:.4f}")
+        dp_cols[0].metric("a1 = k1 + kd", f"{a1_val:.4f}")
+        dp_cols[1].metric("a2 = k2 + kd", f"{a2_val:.4f}")
         dp_cols[2].metric("b = kb + kd", f"{b_val:.4f}")
         dp_cols[3].metric("G3 = alpha * k1 * k2", f"{G3_val:.4f}")
         dp_cols[4].metric("G3 * I0", f"{G3I0_val:.4f}")

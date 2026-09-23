@@ -2,10 +2,17 @@
 
 Overview of what each file in this project does, and the key functions in
 each. The app is a Streamlit UI split across `streamlit_app.py` (thin entry
-point) and the `app/` package (one module per tab), which orchestrate
-several plain-Python model/fitting/plotting modules at the top level; those
-modules have no Streamlit dependency and can be imported/tested
-independently.
+point) and the `app/` package (one module per tab -- every tab lives here
+regardless of section, imported as `app.tab_*`), which orchestrate several
+plain-Python model/fitting/plotting modules; those modules have no
+Streamlit dependency and can be imported/tested independently. The
+non-Streamlit modules (and each section's JSON history files) used
+exclusively by one section live in that section's own folder --
+`Parameter_Identification/` or `Kalman_Filter/` -- as namespace packages
+(imported as `Parameter_Identification.foo`/`Kalman_Filter.foo`, no
+`__init__.py` needed, same as `app/`); modules shared by both sections
+(`Maturation_Models.py`, `gaussian_noise.py`, `history_store.py`) stay at
+the repo root.
 
 ## streamlit_app.py
 
@@ -353,7 +360,7 @@ Fitting tab. No Streamlit dependency.
 - `residuals_2step(x, t, F_meas, fixed)` — same for
   `x = [I0, k1, k2, kb, kd, alpha]`.
 
-### Bleaching_Only_Model.py
+### Parameter_Identification/Bleaching_Only_Model.py
 
 Pure photobleaching-decay model (no maturation, I(t) ≈ 0): closed-form
 `M(t) = M0 * exp(-b*t)`, `b = kb + kd`. Since M0 and alpha aren't
@@ -370,7 +377,7 @@ individually identifiable from F(t) alone, the fit estimates `b` and
 - `residuals_bleach(x, t, F_meas)` — least-squares residuals fitting
   `x = [b, A]`; `kd` fixed at 0.
 
-### Maturation_Model_Known_Bleaching_Pole.py
+### Parameter_Identification/Maturation_Model_Known_Bleaching_Pole.py
 
 Full maturation model variant where `b = kb + kd` is treated as
 known/fixed (e.g. measured via `Bleaching_Only_Model.py`), removing one
@@ -391,7 +398,7 @@ bleaching pole fit" section of the Bleaching Only Simulation tab.
 - `residuals_2step_known_b(x, t, F_meas, fixed)` — residuals fitting
   `x = [k1, k2, K]`; `b` and `kd` fixed via `fixed`.
 
-### variable_bleaching_fit.py
+### Parameter_Identification/variable_bleaching_fit.py
 
 Joint least-squares fitting across multiple fluorescence traces that share
 one maturation rate (`km`, or `k1`/`k2`) but each have their own `kb` and
@@ -403,7 +410,7 @@ traces" section.
 - `residuals_2step_shared_k(x, t, F_meas_list, fixed)` — joint residuals
   across traces; `x = [k1, k2, kb_1, K_1, ...]`.
 
-### bode_plot.py
+### Parameter_Identification/bode_plot.py
 
 Frequency-response (Bode) analysis, derived from each model's linear
 transfer function (built with `scipy.signal`).
@@ -448,7 +455,7 @@ measurement noise.
 - `simulate_bleach_noisy(t, params, M0, B0, kb_std, seed)` — Euler-
   integrates the bleach-only model, perturbing `kb`.
 
-### multi_start_fit.py
+### Parameter_Identification/multi_start_fit.py
 
 Runs the same least-squares fit many times from independently randomized
 initial guesses, to check convergence robustness and parameter
@@ -467,7 +474,7 @@ tabs.
   one row per run: each fitted parameter, `cost`, `converged`, `message`,
   `nfev`, `run`. Non-converged runs are kept and flagged, not dropped.
 
-### multi_start_plots.py
+### Parameter_Identification/multi_start_plots.py
 
 Plotting helper for multi-start fit results — takes a results DataFrame
 (with derived quantities already added as columns) and returns a
@@ -479,7 +486,7 @@ matplotlib `Figure`; the caller (`app/shared.py`) displays it via
   line at `true_values[name]` when known. Used for both the raw-parameter
   and derived-quantity histogram panels.
 
-### profile_likelihood.py
+### Parameter_Identification/profile_likelihood.py
 
 1D profile likelihood analysis: sweeps one raw parameter or derived
 quantity across a grid, re-optimizing everything else at each point via
@@ -497,7 +504,7 @@ quantity across a grid, re-optimizing everything else at each point via
   `DERIVED_QUANTITY_REPARAM` — the derived-quantity formulas and
   reparametrization specs, keyed by 1-step/2-step.
 
-### profile_likelihood_2D.py
+### Parameter_Identification/profile_likelihood_2D.py
 
 2D joint profile likelihood over the (a, b) decay-rate pair
 (`a = km + kd` or `k1 + kd`; `b = kb + kd`), used to visualize the a/b
@@ -511,7 +518,7 @@ Likelihood" section.
 - `plot_profile_2d(profile_df)` — contour plot of SSE over the (a, b)
   grid.
 
-### synthetic_expression.py
+### Kalman_Filter/synthetic_expression.py
 
 Generates ground-truth I/(X)/M trajectories from a user-typed u(t) formula,
 for the Synthetic Gene Expression tab. Drives `Maturation_Models`'
@@ -538,7 +545,7 @@ Expression tab.
 - Constant `EXPRESSION_HELP` — the allowed-syntax help text shown next to
   the tab's u(t) equation input.
 
-### Kalman_Filter_Model.py
+### Kalman_Filter/Kalman_Filter_Model.py
 
 Kalman filter + RTS smoother for the 1-step and 2-step maturation models,
 factored out of `Kalman_Filter/1-step_Kalman_Filter.py`/
@@ -594,22 +601,22 @@ record ↔ entry converters (DataFrame/ndarray ⇄ JSON-safe dict).
 
 - `_load_records(path)` / `_save_records(path, records)` — internal JSON
   read/write helpers.
-- **Multi-start history** (`multi_start_history.json`):
+- **Multi-start history** (`Parameter_Identification/multi_start_history.json`):
   `load_multi_start_history()`, `append_multi_start_entry(entry)`,
   `clear_multi_start_history()`, `delete_multi_start_entry(index)`.
-- **Profile likelihood history** (`profile_likelihood_history.json`):
+- **Profile likelihood history** (`Parameter_Identification/profile_likelihood_history.json`):
   `load_profile_history()`, `append_profile_entry(entry)`,
   `clear_profile_history()`, `delete_profile_entry(index)`.
-- **Bleaching tab history** (`bleach_fit_history.json`):
+- **Bleaching tab history** (`Parameter_Identification/bleach_fit_history.json`):
   `load_bleach_history()`, `append_bleach_entry(entry)`,
   `clear_bleach_history()`, `delete_bleach_entry(index)` — bundles the
   bleach-only fit and known-b fit together per entry.
-- **Variable Bleaching history** (`variable_bleaching_history.json`):
+- **Variable Bleaching history** (`Parameter_Identification/variable_bleaching_history.json`):
   `load_variable_bleaching_history()`,
   `append_variable_bleaching_entry(entry)`,
   `clear_variable_bleaching_history()`,
   `delete_variable_bleaching_entry(index)`.
-- **Kalman filter history** (`kalman_history.json`):
+- **Kalman filter history** (`Kalman_Filter/kalman_history.json`):
   `load_kalman_history()`, `append_kalman_entry(entry)`,
   `clear_kalman_history()`, `delete_kalman_entry(index)` — stores the input
   `params` dict (the tab's *estimated* rate constants) plus the full
@@ -627,30 +634,31 @@ record ↔ entry converters (DataFrame/ndarray ⇄ JSON-safe dict).
 Written/read exclusively via `history_store.py`; each stores persisted
 fit-run history as a JSON array of records (most recent last — the UI
 reverses this for "most recent first" display) so runs survive process
-restarts.
+restarts. Each lives in the folder for the section it belongs to.
 
-- **bleach_fit_history.json** — one record per save from the Bleaching
-  Only Simulation tab, bundling the bleach-only fit (`bleach_only`) and
-  known-bleaching-pole fit (`known_b`) results (each with
-  `results_records`, a serialized multi-start results DataFrame), plus
-  legacy `bleach_bode`/`known_b_bode` keys from before Bode plots were
-  removed from that tab.
-- **multi_start_history.json** — one record per multi-start fit run from
-  the Least Squares Fitting tab: model type, data source, param/derived
-  names, true values, and the results DataFrame as `results_records`.
-- **profile_likelihood_history.json** — one record per profile likelihood
-  run (1D or 2D) from the Profile Likelihood tab: dataset identity/label,
-  synthetic ground truth, noise params, fit region, profiled target, and
-  the profile DataFrame as `profile_records`.
-- **variable_bleaching_history.json** — one record per joint multi-start
-  fit run from the Variable Bleaching tab: shared/trace param names, true
-  values, noise params, fit seed, and results as `results_records` (older
-  entries use a different legacy single-run schema with
-  `shared_true`/`shared_fitted`/`per_trace_rows`).
-- **kalman_history.json** — one record per Kalman filter run from the
-  Kalman Filter tab: the input `params` dict (estimated rate constants)
-  and the full `result` dict (state/measurement trajectories, including
-  RTS-smoothed ones (`I_smooth`/etc.), as plain lists;
+- **Parameter_Identification/bleach_fit_history.json** — one record per
+  save from the Bleaching Only Simulation tab, bundling the bleach-only
+  fit (`bleach_only`) and known-bleaching-pole fit (`known_b`) results
+  (each with `results_records`, a serialized multi-start results
+  DataFrame), plus legacy `bleach_bode`/`known_b_bode` keys from before
+  Bode plots were removed from that tab.
+- **Parameter_Identification/multi_start_history.json** — one record per
+  multi-start fit run from the Least Squares Fitting tab: model type, data
+  source, param/derived names, true values, and the results DataFrame as
+  `results_records`.
+- **Parameter_Identification/profile_likelihood_history.json** — one
+  record per profile likelihood run (1D or 2D) from the Profile Likelihood
+  tab: dataset identity/label, synthetic ground truth, noise params, fit
+  region, profiled target, and the profile DataFrame as `profile_records`.
+- **Parameter_Identification/variable_bleaching_history.json** — one
+  record per joint multi-start fit run from the Variable Bleaching tab:
+  shared/trace param names, true values, noise params, fit seed, and
+  results as `results_records` (older entries use a different legacy
+  single-run schema with `shared_true`/`shared_fitted`/`per_trace_rows`).
+- **Kalman_Filter/kalman_history.json** — one record per Kalman filter run
+  from the Kalman Filter tab: the input `params` dict (estimated rate
+  constants) and the full `result` dict (state/measurement trajectories,
+  including RTS-smoothed ones (`I_smooth`/etc.), as plain lists;
   `is_two_step`/`alpha_true`/`alpha_est`/`max_F_diff` as scalars; older
   entries have a single `alpha` scalar instead of `alpha_true`/`alpha_est`,
   and lack the smoothed trajectories entirely, from before those existed).

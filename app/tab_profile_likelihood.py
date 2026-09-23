@@ -12,13 +12,13 @@ import streamlit as st
 
 from Maturation_Models import residuals_1step, residuals_2step
 from history_store import append_profile_entry
-from profile_likelihood import (
+from Parameter_Identification.profile_likelihood import (
     profile_raw_parameter,
     profile_derived_quantity,
     DERIVED_QUANTITY_FORMULAS,
     compute_true_values,
 )
-from profile_likelihood_2D import profile_ab_2d
+from Parameter_Identification.profile_likelihood_2D import profile_ab_2d
 
 from app.shared import render_profile_likelihood_result, render_profile_2d_result
 
@@ -189,7 +189,14 @@ def render_profile_likelihood_tab():
             "data with the two decay rates' physical roles swapped."
         )
 
-        default_a = _profile_default_value("a")
+        # The 2D module's own "a"/"b" grid convention names the first decay
+        # pole "a" for either model (see profile_likelihood_2D.py's own
+        # `decay_param = "k1" if fit_is_two_step else "km"`), but the
+        # per-quantity DERIVED_QUANTITY_FORMULAS/true_values_p this section
+        # borrows a default/true value from names that pole "a" (1-step) or
+        # "a1" (2-step) -- so the lookup key has to match the active model.
+        first_pole_name = "a1" if fit_is_two_step_p else "a"
+        default_a = _profile_default_value(first_pole_name)
         default_b = _profile_default_value("b")
         # Default both axes to span the same range, wide enough to cover both
         # a's and b's own default value -- so the mirror point (b_true, a_true)
@@ -252,7 +259,7 @@ def render_profile_likelihood_tab():
 
                 dataset_key_p2 = current_fit_data.get("dataset_key")
                 dataset_info_p2 = st.session_state.get("dataset_info", {}).get(dataset_key_p2, {})
-                true_a_p = true_values_p.get("a")
+                true_a_p = true_values_p.get(first_pole_name)
                 true_b_p = true_values_p.get("b")
 
                 append_profile_entry({
