@@ -7,11 +7,16 @@ here rather than duplicated.
 
 import numpy as np
 import pandas as pd
+from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import streamlit as st
+from app.plot_style import show_figure
 
 from Parameter_Identification.multi_start_plots import plot_histograms
 from Parameter_Identification.profile_likelihood_2D import plot_profile_2d
+from Parameter_Identification.plot_labels import math_label
+from app.tab_simulation import SPECIES_COLORS
 
 # Transfer-function formulas (production input u -> fluorescence F) shown
 # alongside every Bode plot in the UI, matching bode_plot.py's
@@ -89,17 +94,17 @@ def render_bode_result(br, title):
     ax_mag.set_xlabel("Frequency (rad/min)")
     ax_mag.set_title(title)
     ax_mag.grid(True, which="both", linestyle="--", alpha=0.5)
-    ax_mag.legend(fontsize=8)
+    ax_mag.legend()
 
     ax_phase.semilogx(br["w"], br["phase_syn"], color="tab:green", linestyle="--", label="Synthetic input")
     ax_phase.semilogx(br["w"], br["phase_fit"], color="tab:red", linestyle=":", label=br["fit_label"])
     ax_phase.set_ylabel("Phase (degrees)")
     ax_phase.set_xlabel("Frequency (rad/min)")
     ax_phase.grid(True, which="both", linestyle="--", alpha=0.5)
-    ax_phase.legend(fontsize=8)
+    ax_phase.legend()
 
     fig_bode.tight_layout()
-    st.pyplot(fig_bode)
+    show_figure(fig_bode)
 
     cutoff_col1, cutoff_col2 = st.columns(2)
     if br["cutoff_syn"] is not None:
@@ -137,13 +142,13 @@ def render_multi_start_results(results_df, param_names, derived_names, true_valu
 
     st.markdown("**Raw fitted parameters across runs**")
     fig_raw = plot_histograms(plot_df, param_names, true_values, color="tab:blue")
-    st.pyplot(fig_raw)
+    show_figure(fig_raw)
 
     extra_derived = [name for name in derived_names if name not in param_names]
     if extra_derived:
         st.markdown("**Derived quantities across runs**")
         fig_der = plot_histograms(plot_df, extra_derived, true_values, color="tab:purple")
-        st.pyplot(fig_der)
+        show_figure(fig_der)
 
     st.markdown("**Summary statistics across runs (mean, std, coefficient of variation)**")
     summary_rows = []
@@ -223,12 +228,12 @@ def render_profile_likelihood_result(profile_df, profile_target, true_value=None
             true_value, color="tab:red", linestyle=":",
             label="Synthetic input (true value)",
         )
-    ax_p.set_xlabel(profile_target)
+    ax_p.set_xlabel(math_label(profile_target))
     ax_p.set_ylabel("SSE (sum of squared residuals)")
-    ax_p.set_title(f"Profile likelihood: {profile_target}")
-    ax_p.legend(fontsize=8)
+    ax_p.set_title(f"Profile Likelihood: {math_label(profile_target)}")
+    ax_p.legend()
     fig_p.tight_layout()
-    st.pyplot(fig_p)
+    show_figure(fig_p)
 
     with st.expander("Profile likelihood raw data"):
         st.dataframe(profile_df, hide_index=True)
@@ -261,74 +266,74 @@ def render_kalman_result(result):
     )
 
     if result["is_two_step"]:
-        fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+        fig, axes = plt.subplots(2, 3, figsize=(21, 11))
     else:
-        fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+        fig, axes = plt.subplots(2, 2, figsize=(15, 11))
 
     filt_kwargs = dict(color="b", lw=1.5, alpha=0.7) if has_smooth else dict(color="b", lw=2, alpha=1.0)
 
     ax = axes[0, 0]
     ax.scatter(t, result["z_n"], c="gray", s=15, alpha=0.5, label="Noisy fluorescence measurements")
-    ax.plot(t, alpha_true * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha_true * M_true)")
-    ax.plot(t, alpha_est * result["M_est"], linestyle="-", label="Filtered (alpha_est * M_est)", **filt_kwargs)
+    ax.plot(t, alpha_true * result["true_M"], "g--", lw=1.5, label=r"True fluorescence ($\alpha_{\mathrm{true}}\,M_{\mathrm{true}}$)")
+    ax.plot(t, alpha_est * result["M_est"], linestyle="-", label=r"Filtered ($\alpha_{\mathrm{est}}\,M_{\mathrm{est}}$)", **filt_kwargs)
     if has_smooth:
-        ax.plot(t, alpha_est * result["M_smooth"], "r-", lw=1.5, label="Smoothed (alpha_est * M_smooth)")
+        ax.plot(t, alpha_est * result["M_smooth"], "r-", lw=1.5, label=r"Smoothed ($\alpha_{\mathrm{est}}\,M_{\mathrm{smooth}}$)")
     ax.set_xlabel("Time (min)")
     ax.set_ylabel("Fluorescence")
-    ax.set_title("Fluorescence: measured vs. reconstructed")
-    ax.legend(fontsize=8)
+    ax.set_title("Fluorescence: Measured Vs. Reconstructed")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     ax = axes[0, 1]
-    ax.plot(t, result["true_I"], "g--", lw=1.5, label="True I(t)")
-    ax.plot(t, result["I_est"], linestyle="-", label="Filtered I(t)", **filt_kwargs)
+    ax.plot(t, result["true_I"], "g--", lw=1.5, label="True $I(t)$")
+    ax.plot(t, result["I_est"], linestyle="-", label="Filtered $I(t)$", **filt_kwargs)
     if has_smooth:
-        ax.plot(t, result["I_smooth"], "r-", lw=1.5, label="Smoothed I(t)")
+        ax.plot(t, result["I_smooth"], "r-", lw=1.5, label="Smoothed $I(t)$")
     ax.set_xlabel("Time (min)")
-    ax.set_ylabel("Immature protein I")
-    ax.set_title("Immature protein pool")
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Immature protein concentration $I$")
+    ax.set_title("Immature Protein Pool")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     if result["is_two_step"]:
         ax = axes[0, 2]
-        ax.plot(t, result["true_X"], "g--", lw=1.5, label="True X(t)")
-        ax.plot(t, result["X_est"], linestyle="-", label="Filtered X(t)", **filt_kwargs)
+        ax.plot(t, result["true_X"], "g--", lw=1.5, label="True $X(t)$")
+        ax.plot(t, result["X_est"], linestyle="-", label="Filtered $X(t)$", **filt_kwargs)
         if has_smooth:
-            ax.plot(t, result["X_smooth"], "r-", lw=1.5, label="Smoothed X(t)")
+            ax.plot(t, result["X_smooth"], "r-", lw=1.5, label="Smoothed $X(t)$")
         ax.set_xlabel("Time (min)")
-        ax.set_ylabel("Intermediate protein X")
-        ax.set_title("Intermediate protein pool")
-        ax.legend(fontsize=8)
+        ax.set_ylabel("Intermediate protein concentration $X$")
+        ax.set_title("Intermediate Protein Pool")
+        ax.legend()
         ax.grid(alpha=0.3)
 
     ax = axes[1, 0]
-    ax.plot(t, result["true_M"], "g--", lw=1.5, label="True M(t)")
-    ax.plot(t, result["M_est"], linestyle="-", label="Filtered M(t)", **filt_kwargs)
+    ax.plot(t, result["true_M"], "g--", lw=1.5, label="True $M(t)$")
+    ax.plot(t, result["M_est"], linestyle="-", label="Filtered $M(t)$", **filt_kwargs)
     if has_smooth:
-        ax.plot(t, result["M_smooth"], "r-", lw=1.5, label="Smoothed M(t)")
+        ax.plot(t, result["M_smooth"], "r-", lw=1.5, label="Smoothed $M(t)$")
     ax.set_xlabel("Time (min)")
-    ax.set_ylabel("Mature protein M")
-    ax.set_title("Mature protein pool")
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Mature protein concentration $M$")
+    ax.set_title("Mature Protein Pool")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     ax = axes[1, 1]
-    ax.plot(t, result["true_u"], "g--", lw=1.5, label="True u(t) (gene expression)")
-    ax.plot(t, result["u_est"], linestyle="-", label="Filtered u(t)", **filt_kwargs)
+    ax.plot(t, result["true_u"], "g--", lw=1.5, label="True $u(t)$ (gene expression)")
+    ax.plot(t, result["u_est"], linestyle="-", label="Filtered $u(t)$", **filt_kwargs)
     if has_smooth:
-        ax.plot(t, result["u_smooth"], "r-", lw=1.5, label="Smoothed u(t)")
+        ax.plot(t, result["u_smooth"], "r-", lw=1.5, label="Smoothed $u(t)$")
     ax.set_xlabel("Time (min)")
-    ax.set_ylabel("Synthesis rate u")
-    ax.set_title("Reconstructed gene expression rate (the target)")
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Synthesis rate $u$")
+    ax.set_title("Reconstructed Gene Expression Rate (The Target)")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     if result["is_two_step"]:
         axes[1, 2].axis("off")
 
     fig.tight_layout()
-    st.pyplot(fig)
+    show_figure(fig)
 
     def _rmse(a, b):
         return float(np.sqrt(np.mean((np.asarray(a) - np.asarray(b)) ** 2)))
@@ -372,6 +377,11 @@ def render_kalman_result(result):
     st.dataframe(rmse_df.style.format("{:.4f}"))
 
 
+# Times (min) of the u(t) peak and the M(t) peak marked as the reporter delay
+# on the Synthetic Gene Expression combined graph.
+REPORTER_DELAY_PEAK_TIMES = (155.0, 178.0)
+
+
 def render_synthetic_expression_result(result):
     """Render the ground-truth u(t)/I/(X)/M/fluorescence plots for one
     Synthetic Gene Expression run.
@@ -384,57 +394,175 @@ def render_synthetic_expression_result(result):
     alpha = result["alpha"]
 
     if result["is_two_step"]:
-        fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+        fig, axes = plt.subplots(2, 3, figsize=(21, 11))
     else:
-        fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+        fig, axes = plt.subplots(2, 2, figsize=(15, 11))
 
     ax = axes[0, 0]
     ax.scatter(t, result["z_n"], c="gray", s=15, alpha=0.5, label="Noisy fluorescence measurements")
-    ax.plot(t, alpha * result["true_M"], "g--", lw=1.5, label="True fluorescence (alpha * M_true)")
+    ax.plot(t, alpha * result["true_M"], "g--", lw=1.5, label=r"True fluorescence ($\alpha\,M_{\mathrm{true}}$)")
     ax.set_xlabel("Time (min)")
     ax.set_ylabel("Fluorescence")
-    ax.set_title("Fluorescence: true vs. noisy measurement")
-    ax.legend(fontsize=8)
+    ax.set_title("Fluorescence: True Vs. Noisy Measurement")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     ax = axes[0, 1]
-    ax.plot(t, result["true_I"], "g--", lw=1.5, label="True I(t)")
+    ax.plot(t, result["true_I"], "g--", lw=1.5, label="True $I(t)$")
     ax.set_xlabel("Time (min)")
-    ax.set_ylabel("Immature protein I")
-    ax.set_title("Immature protein pool")
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Immature protein concentration $I$")
+    ax.set_title("Immature Protein Pool")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     if result["is_two_step"]:
         ax = axes[0, 2]
-        ax.plot(t, result["true_X"], "g--", lw=1.5, label="True X(t)")
+        ax.plot(t, result["true_X"], "g--", lw=1.5, label="True $X(t)$")
         ax.set_xlabel("Time (min)")
-        ax.set_ylabel("Intermediate protein X")
-        ax.set_title("Intermediate protein pool")
-        ax.legend(fontsize=8)
+        ax.set_ylabel("Intermediate protein concentration $X$")
+        ax.set_title("Intermediate Protein Pool")
+        ax.legend()
         ax.grid(alpha=0.3)
 
     ax = axes[1, 0]
-    ax.plot(t, result["true_M"], "g--", lw=1.5, label="True M(t)")
+    ax.plot(t, result["true_M"], "g--", lw=1.5, label="True $M(t)$")
     ax.set_xlabel("Time (min)")
-    ax.set_ylabel("Mature protein M")
-    ax.set_title("Mature protein pool")
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Mature protein concentration $M$")
+    ax.set_title("Mature Protein Pool")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     ax = axes[1, 1]
-    ax.plot(t, result["true_u"], "g--", lw=1.5, label="True u(t) (gene expression)")
+    ax.plot(t, result["true_u"], "g--", lw=1.5, label="True $u(t)$ (gene expression)")
     ax.set_xlabel("Time (min)")
-    ax.set_ylabel("Synthesis rate u")
-    ax.set_title("Gene expression signal (user-defined u(t))")
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Synthesis rate $u$")
+    ax.set_title("Gene Expression Signal (User-Defined $u(t)$)")
+    ax.legend()
     ax.grid(alpha=0.3)
 
     if result["is_two_step"]:
         axes[1, 2].axis("off")
 
     fig.tight_layout()
-    st.pyplot(fig)
+    show_figure(fig)
+
+    # Gene expression and protein pools on one plot, to show the reporter
+    # delay. u(t) is a rate (/min), typically far smaller than the protein
+    # amounts, so it gets its own right axis.
+    t = np.asarray(t, dtype=float)
+    true_u = np.asarray(result["true_u"], dtype=float)
+    true_M = np.asarray(result["true_M"], dtype=float)
+
+    fig, ax = plt.subplots(figsize=(15, 7))
+    observed = [ax.scatter(
+        t, result["z_n"], color=SPECIES_COLORS["F"], s=15, alpha=0.5,
+        label="Noisy fluorescence measurements",
+    )]
+    hidden = ax.plot(t, result["true_I"], lw=1.5, color=SPECIES_COLORS["I"], label="$I(t)$ (immature)")
+    if result["is_two_step"]:
+        hidden += ax.plot(t, result["true_X"], lw=1.5, color=SPECIES_COLORS["X"], label="$X(t)$ (intermediate)")
+    hidden += ax.plot(t, true_M, lw=1.5, color=SPECIES_COLORS["M"], label="$M(t)$ (mature)")
+    ax.set_xlabel("Time (min)")
+    ax.set_ylabel("Protein Concentration / Fluorescence")
+
+    ax_u = ax.twinx()
+    hidden += ax_u.plot(t, true_u, "--", color=SPECIES_COLORS["u"], lw=1.5, label="$u(t)$ (gene expression)")
+    ax_u.set_ylabel("Synthesis rate $u$ (/min)")
+    # Both axes start at 0. The left axis gets headroom above the tallest
+    # curve for the delay annotation, and the u axis runs to twice u's peak
+    # so u(t) stays in the lower half instead of stretching over the plot.
+    left_max = max(
+        [float(np.max(result["z_n"]))] + [np.max(line.get_ydata()) for line in ax.get_lines()]
+    )
+    ax.set_ylim(0, 1.25 * left_max if left_max > 0 else 1)
+    u_max = float(np.max(true_u))
+    if u_max > 0:
+        ax_u.set_ylim(0, 2 * u_max)
+
+    # Mark a peak of u(t) and the following peak of M(t); the gap between
+    # them is the reporter delay -- the lag through the whole u -> I (-> X) -> M
+    # chain, i.e. maturation plus bleaching/degradation, not maturation alone.
+    # The peak times are hardcoded for now (see REPORTER_DELAY_PEAK_TIMES);
+    # `_peaks` below can find them automatically instead.
+    t_u, t_M = REPORTER_DELAY_PEAK_TIMES
+    if t[0] <= t_u <= t[-1] and t[0] <= t_M <= t[-1]:
+        u_val = np.interp(t_u, t, true_u)
+        M_val = np.interp(t_M, t, true_M)
+        ax_u.plot(t_u, u_val, "o", color=SPECIES_COLORS["u"], ms=6, zorder=5)
+        ax.plot(t_M, M_val, "o", color=SPECIES_COLORS["M"], ms=6, zorder=5)
+        arrow_y = 0.88  # axes fraction, inside the headroom set above
+        for t_peak, color in ((t_u, SPECIES_COLORS["u"]), (t_M, SPECIES_COLORS["M"])):
+            ax.axvline(t_peak, ymax=arrow_y, color=color, linestyle=":", lw=1)
+        ax.annotate(
+            "", xy=(t_M, arrow_y), xytext=(t_u, arrow_y), xycoords=("data", "axes fraction"),
+            arrowprops=dict(arrowstyle="<->", color="black", lw=1, shrinkA=0, shrinkB=0),
+        )
+        ax.text(
+            (t_u + t_M) / 2, arrow_y + 0.015, rf"Reporter delay $\Delta t$ = {t_M - t_u:.1f} min",
+            transform=ax.get_xaxis_transform(), ha="center", va="bottom", fontsize=plt.rcParams["legend.fontsize"],
+        )
+    else:
+        st.caption(
+            f"The reporter delay peak times (t = {t_u:g} and t = {t_M:g} min) are "
+            "outside this run's time window, so the delay isn't marked."
+        )
+
+    # Legend grouped under "Observed" (what the experiment measures) and
+    # "Hidden" (the states the Kalman filter has to reconstruct), placed
+    # outside the plot so it never covers the data.
+    _grouped_legend(ax, {"Observed": observed, "Hidden": hidden},
+                    loc="upper left", bbox_to_anchor=(1.12, 1.0))
+    ax.set_title("Reporter Delay: Gene Expression Vs. Protein Pools")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    show_figure(fig)
+
+
+def _grouped_legend(ax, groups, **legend_kwargs):
+    """Legend on `ax` with a bold heading row above each group of artists.
+
+    `groups` maps heading text to a list of plotted artists. Heading rows
+    have no marker, and their empty marker slot is collapsed so the heading
+    lines up flush left with the legend box.
+    """
+    handles, labels, heading_rows = [], [], set()
+    for heading, artists in groups.items():
+        heading_rows.add(len(handles))
+        handles.append(Line2D([], [], linestyle="none"))
+        labels.append(rf"$\mathbf{{{heading}}}$")
+        handles += artists
+        labels += [a.get_label() for a in artists]
+    legend = ax.legend(handles, labels, **legend_kwargs)
+    # Collapse the marker slot of heading rows. Uses matplotlib's legend
+    # layout internals, so skip quietly (heading just stays indented) if
+    # those ever change.
+    try:
+        rows = [row for column in legend._legend_handle_box.get_children()
+                for row in column.get_children()]
+        for i in heading_rows:
+            rows[i].get_children()[0].width = 0
+            rows[i].sep = 0
+    except (AttributeError, IndexError):
+        pass
+    return legend
+
+
+def _peaks(t, y):
+    """(time, value) of every interior local maximum of `y`, in time order.
+
+    Not currently called: the reporter delay uses REPORTER_DELAY_PEAK_TIMES.
+
+    Each peak is refined between samples with a parabola through the peak
+    sample and its two neighbours, so the delay isn't rounded to the
+    sampling interval.
+    """
+    refined = []
+    for i in find_peaks(y)[0]:
+        y0, y1, y2 = y[i - 1], y[i], y[i + 1]
+        denom = y0 - 2 * y1 + y2
+        offset = 0.5 * (y0 - y2) / denom if denom != 0 else 0.0
+        refined.append((t[i] + offset * (t[i + 1] - t[i]), y1 - 0.25 * (y0 - y2) * offset))
+    return refined
 
 
 def render_profile_2d_result(profile_df):
@@ -449,7 +577,7 @@ def render_profile_2d_result(profile_df):
     )
 
     fig = plot_profile_2d(profile_df)
-    st.pyplot(fig)
+    show_figure(fig)
 
     with st.expander("2D profile likelihood raw data"):
         st.dataframe(profile_df, hide_index=True)

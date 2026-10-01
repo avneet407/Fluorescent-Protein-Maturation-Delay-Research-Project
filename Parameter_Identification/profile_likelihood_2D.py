@@ -122,8 +122,8 @@ def plot_profile_2d(profile_df):
     filled = ax.contourf(a_vals, b_vals, sse_grid, levels=15, cmap="viridis_r")
     fig.colorbar(filled, ax=ax, label="SSE")
 
-    ax.set_xlabel("a")
-    ax.set_ylabel("b")
-    ax.set_title("2D profile likelihood: SSE over (a, b)")
+    ax.set_xlabel("$a$")
+    ax.set_ylabel("$b$")
+    ax.set_title("2D Profile Likelihood: SSE Over ($a$, $b$)")
     fig.tight_layout()
     return fig

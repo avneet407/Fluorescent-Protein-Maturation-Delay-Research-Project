@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
+from app.plot_style import show_figure
 from scipy.integrate import solve_ivp
 
 from Maturation_Models import model_1step, model_2step
@@ -17,6 +18,7 @@ SPECIES_COLORS = {
     "M": "tab:green",
     "B": "tab:purple",
     "F": "red",
+    "u": "tab:pink",  # gene expression / synthesis rate
 }
 
 
@@ -184,27 +186,27 @@ def render_simulation_tab():
         fig, ax = plt.subplots(figsize=(9, 5))
 
         if sim_result["is_two_step"]:
-            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)", color=SPECIES_COLORS["I"])
-            ax.plot(sim_result["t"], sim_result["X"], label="X (intermediate)", color=SPECIES_COLORS["X"])
-            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)", color=SPECIES_COLORS["M"])
-            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)", color=SPECIES_COLORS["B"])
-            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)",
+            ax.plot(sim_result["t"], sim_result["I"], label="$I$ (immature)", color=SPECIES_COLORS["I"])
+            ax.plot(sim_result["t"], sim_result["X"], label="$X$ (intermediate)", color=SPECIES_COLORS["X"])
+            ax.plot(sim_result["t"], sim_result["M"], label="$M$ (mature)", color=SPECIES_COLORS["M"])
+            ax.plot(sim_result["t"], sim_result["B"], label="$B$ (bleached)", color=SPECIES_COLORS["B"])
+            ax.plot(sim_result["t"], sim_result["F"], "--", label=r"$F = \alpha M$ (fluorescence)",
                     linewidth=2, color=SPECIES_COLORS["F"])
-            ax.set_title("2-step maturation model")
+            ax.set_title("2-Step Maturation Model")
         else:
-            ax.plot(sim_result["t"], sim_result["I"], label="I (immature)", color=SPECIES_COLORS["I"])
-            ax.plot(sim_result["t"], sim_result["M"], label="M (mature)", color=SPECIES_COLORS["M"])
-            ax.plot(sim_result["t"], sim_result["B"], label="B (bleached)", color=SPECIES_COLORS["B"])
-            ax.plot(sim_result["t"], sim_result["F"], "--", label="F = alpha * M (fluorescence)",
+            ax.plot(sim_result["t"], sim_result["I"], label="$I$ (immature)", color=SPECIES_COLORS["I"])
+            ax.plot(sim_result["t"], sim_result["M"], label="$M$ (mature)", color=SPECIES_COLORS["M"])
+            ax.plot(sim_result["t"], sim_result["B"], label="$B$ (bleached)", color=SPECIES_COLORS["B"])
+            ax.plot(sim_result["t"], sim_result["F"], "--", label=r"$F = \alpha M$ (fluorescence)",
                     linewidth=2, color=SPECIES_COLORS["F"])
-            ax.set_title("1-step maturation model")
+            ax.set_title("1-Step Maturation Model")
 
         ax.set_xlabel("Time (min)")
-        ax.set_ylabel("Amount/ Mean Intensity")
+        ax.set_ylabel("Protein concentration / Mean intensity")
         ax.legend()
         fig.tight_layout()
 
-        st.pyplot(fig)
+        show_figure(fig)
 
     return {
         "is_two_step": is_two_step,

@@ -30,6 +30,7 @@ no Streamlit dependency.
 
 import streamlit as st
 
+import app.plot_style  # noqa: F401  (sets Latin Modern for all figures)
 from app.tab_simulation import render_simulation_tab
 from app.tab_data import render_data_tab
 from app.tab_bleaching import render_bleaching_tab

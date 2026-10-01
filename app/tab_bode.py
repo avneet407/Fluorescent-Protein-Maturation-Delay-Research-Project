@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from app.plot_style import show_figure
 
 from Parameter_Identification.bode_plot import (
     bode_1step,
@@ -178,8 +179,8 @@ def render_bode_tab():
             "Analytical cutoff (rad/min)": wc_analytical,
         })
 
-    ax_mag.legend(fontsize=8)
-    ax_phase.legend(fontsize=8)
+    ax_mag.legend()
+    ax_phase.legend()
     fig.tight_layout()
 
     if has_one_step:
@@ -187,7 +188,7 @@ def render_bode_tab():
     if has_two_step:
         st.latex(FORMULA_2STEP)
 
-    st.pyplot(fig)
+    show_figure(fig)
 
     st.markdown("**-3 dB cutoff frequencies**")
     summary_df = pd.DataFrame(summary_rows)

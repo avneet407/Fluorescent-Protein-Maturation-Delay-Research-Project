@@ -9,6 +9,8 @@ responsible for displaying it (e.g. via `st.pyplot`).
 import numpy as np
 import matplotlib.pyplot as plt
 
+from Parameter_Identification.plot_labels import math_label
+
 
 def plot_histograms(df, names, true_values, color="tab:blue", figsize_per_panel=3.6):
     """Marginal histograms of `names` (one subplot per name), across runs in `df`.
@@ -35,11 +37,11 @@ def plot_histograms(df, names, true_values, color="tab:blue", figsize_per_panel=
                 true_values[name], color="tab:red", linestyle="--",
                 linewidth=2, label="True value",
             )
-            ax.legend(fontsize=7)
+            ax.legend()
         ax.set_xlim(hist_range)
         ax.ticklabel_format(axis="x", useOffset=False, style="plain")
-        ax.set_title(name)
-        ax.set_xlabel(name)
+        ax.set_title(math_label(name))
+        ax.set_xlabel(math_label(name))
         ax.set_ylabel("Count")
     fig.tight_layout()
     return fig

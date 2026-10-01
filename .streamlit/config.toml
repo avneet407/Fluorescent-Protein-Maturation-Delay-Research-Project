@@ -1,0 +1,40 @@
+# Serves ./static/ at app/static/ so the browser can load the bundled
+# Latin Modern font files for the page text (graphs use cmr10, see
+# app/plot_style.py).
+[server]
+enableStaticServing = true
+
+[theme]
+font = "Latin Modern Roman, serif"
+headingFont = "Latin Modern Roman, serif"
+codeFont = "Latin Modern Mono, monospace"
+
+[[theme.fontFaces]]
+family = "Latin Modern Roman"
+url = "app/static/fonts/lmroman10-regular.otf"
+weight = 400
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Latin Modern Roman"
+url = "app/static/fonts/lmroman10-bold.otf"
+weight = 700
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Latin Modern Roman"
+url = "app/static/fonts/lmroman10-italic.otf"
+weight = 400
+style = "italic"
+
+[[theme.fontFaces]]
+family = "Latin Modern Roman"
+url = "app/static/fonts/lmroman10-bolditalic.otf"
+weight = 700
+style = "italic"
+
+[[theme.fontFaces]]
+family = "Latin Modern Mono"
+url = "app/static/fonts/lmmono10-regular.otf"
+weight = 400
+style = "normal"

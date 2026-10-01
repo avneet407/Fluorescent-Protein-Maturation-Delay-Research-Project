@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from app.plot_style import show_figure
 from scipy.optimize import least_squares
 
 from Maturation_Models import (
@@ -204,7 +205,7 @@ def render_fitting_tab():
                             _, I_fit, X_fit, M_fit, B_fit, F_fit = simulate_2step(
                                 t_fit, fitted_params, I0=I0_hat, X0=0.0, M0=0.0, B0=0.0
                             )
-                            fit_title = "2-step fit on selected time region"
+                            fit_title = "2-Step Fit On Selected Time Region"
                             metrics_cols = {
                                 "col1": [("I0", I0_hat), ("k1", k1_hat)],
                                 "col2": [("k2", k2_hat), ("kb", kb_hat)],
@@ -242,7 +243,7 @@ def render_fitting_tab():
                             _, I_fit, M_fit, B_fit, F_fit = simulate_1step(
                                 t_fit, fitted_params, I0=I0_hat, M0=0.0, B0=0.0
                             )
-                            fit_title = "1-step fit on selected time region"
+                            fit_title = "1-Step Fit On Selected Time Region"
                             metrics_cols = {
                                 "col1": [("I0", I0_hat), ("km", km_hat)],
                                 "col2": [("kb", kb_hat), ("kd", kd_hat)],
@@ -358,7 +359,7 @@ def render_fitting_tab():
                         ax3.set_ylabel("Mean intensity")
                         ax3.legend()
                         fig3.tight_layout()
-                        st.pyplot(fig3)
+                        show_figure(fig3)
 
                         if fsr["comparison_df"] is not None:
                             st.markdown("**Synthetic data: input vs. fitted derived quantities**")

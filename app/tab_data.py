@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from app.plot_style import show_figure
 
 from gaussian_noise import (
     simulate_1step_noisy,
@@ -211,10 +212,11 @@ def render_data_tab(sim_state):
         ax2.plot(data["Time"], data["Mean"], marker="o", markersize=3)
         ax2.set_xlabel("Time (min)")
         ax2.set_ylabel("Mean intensity")
-        ax2.set_title(data_label)
+        # Uploaded file names are shown as-is; only the fixed label is title-cased.
+        ax2.set_title("Synthetic Data" if data_label == "Synthetic data" else data_label)
         fig2.tight_layout()
 
-        st.pyplot(fig2)
+        show_figure(fig2)
         st.dataframe(data)
 
         dataset_key = compute_dataset_key(data_label, data)

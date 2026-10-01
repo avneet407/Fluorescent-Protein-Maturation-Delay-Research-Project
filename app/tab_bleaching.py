@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from app.plot_style import show_figure
 
 from Parameter_Identification.Bleaching_Only_Model import simulate_bleach, residuals_bleach
 from Parameter_Identification.Maturation_Model_Known_Bleaching_Pole import (
@@ -170,17 +171,17 @@ def render_bleaching_tab():
         st.info("Set your parameters above and click **Run Simulation**.")
     else:
         fig_b, ax_b = plt.subplots(figsize=(9, 5))
-        ax_b.plot(bleach_sim["t"], bleach_sim["M"], label="M (mature)", color=SPECIES_COLORS["M"])
-        ax_b.plot(bleach_sim["t"], bleach_sim["B"], label="B (bleached)", color=SPECIES_COLORS["B"])
-        ax_b.plot(bleach_sim["t"], bleach_sim["F"], "--", label="F = alpha * M (fluorescence)",
+        ax_b.plot(bleach_sim["t"], bleach_sim["M"], label="$M$ (mature)", color=SPECIES_COLORS["M"])
+        ax_b.plot(bleach_sim["t"], bleach_sim["B"], label="$B$ (bleached)", color=SPECIES_COLORS["B"])
+        ax_b.plot(bleach_sim["t"], bleach_sim["F"], "--", label=r"$F = \alpha M$ (fluorescence)",
                   linewidth=2, color=SPECIES_COLORS["F"])
         ax_b.set_xlabel("Time (min)")
-        ax_b.set_ylabel("Amount / Mean Intensity")
-        ax_b.set_title("Bleaching-only model (I(t) ~ 0)")
+        ax_b.set_ylabel("Protein concentration / Mean intensity")
+        ax_b.set_title(r"Bleaching-Only Model ($I(t) \approx 0$)")
         ax_b.legend()
         fig_b.tight_layout()
 
-        st.pyplot(fig_b)
+        show_figure(fig_b)
 
         st.divider()
         # Perturbs kb/kd/alpha with noise and adds measurement noise, to give
@@ -259,9 +260,9 @@ def render_bleaching_tab():
             ax_syn_b.plot(bleach_synth["t"], bleach_synth["F"], marker="o", markersize=3)
             ax_syn_b.set_xlabel("Time (min)")
             ax_syn_b.set_ylabel("Mean intensity")
-            ax_syn_b.set_title("Synthetic data")
+            ax_syn_b.set_title("Synthetic Data")
             fig_syn_b.tight_layout()
-            st.pyplot(fig_syn_b)
+            show_figure(fig_syn_b)
 
         st.divider()
         # Fits b and A directly (Bleaching_Only_Model.residuals_bleach) from
@@ -536,7 +537,7 @@ def render_bleaching_tab():
             else:
                 st.markdown("**Derived quantities across runs**")
                 fig_kb = plot_histograms(plot_df_kb, derived_names_kb, true_values_kb, color="tab:purple")
-                st.pyplot(fig_kb)
+                show_figure(fig_kb)
 
                 st.markdown("**Synthetic input vs. fitted derived quantities**")
                 summary_rows_kb = []

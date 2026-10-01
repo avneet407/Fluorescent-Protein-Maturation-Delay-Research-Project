@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
+from app.plot_style import show_figure
 
 from Maturation_Models import simulate_1step, simulate_2step
 from gaussian_noise import simulate_1step_noisy, simulate_2step_noisy, add_measurement_noise
@@ -178,15 +179,12 @@ def render_variable_bleaching_tab():
         ax.plot(t_eval, F, label=ks["label"])
 
     ax.set_xlabel("Time (min)")
-    ax.set_ylabel("F = alpha * M (fluorescence)")
-    ax.set_title(
-        ("2-step" if is_two_step else "1-step")
-        + " maturation model — fluorescence across parameter sets (kd = 0)"
-    )
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Mean Intensity Fluorescence")
+    ax.set_title("Variable Bleaching")
+    ax.legend()
     fig.tight_layout()
 
-    st.pyplot(fig)
+    show_figure(fig)
 
     st.divider()
     st.subheader("Generate synthetic data")
@@ -305,10 +303,10 @@ def render_variable_bleaching_tab():
             ax_syn.plot(sr["t"], sr["F"], marker="o", markersize=2, linewidth=1, label=sr["label"])
         ax_syn.set_xlabel("Time (min)")
         ax_syn.set_ylabel("Mean intensity (synthetic)")
-        ax_syn.set_title("Synthetic data across parameter sets")
-        ax_syn.legend(fontsize=8)
+        ax_syn.set_title("Synthetic Data Across Parameter Sets")
+        ax_syn.legend()
         fig_syn.tight_layout()
-        st.pyplot(fig_syn)
+        show_figure(fig_syn)
 
         combined_rows = [
             {"Set": sr["label"], "kb": sr["kb"], "Time": t_val, "Mean": f_val}
@@ -465,7 +463,7 @@ def render_variable_bleaching_tab():
             shared_label = "k1, k2" if fit_result["is_two_step"] else "km"
             st.markdown(f"**{shared_label} across runs** (shared across all traces)")
             fig_shared = plot_histograms(plot_df_vb, shared_names, fit_result["true_values"], color="tab:blue")
-            st.pyplot(fig_shared)
+            show_figure(fig_shared)
 
             summary_rows_vb = []
             for name in shared_names:
@@ -496,11 +494,11 @@ def render_variable_bleaching_tab():
 
             st.markdown("**kb across runs, per trace**")
             fig_kb = plot_histograms(display_df_vb, kb_display_names, display_true_values, color="tab:purple")
-            st.pyplot(fig_kb)
+            show_figure(fig_kb)
 
             st.markdown("**K across runs, per trace** (K = G\\*I0 / G3\\*I0)")
             fig_K = plot_histograms(display_df_vb, K_display_names, display_true_values, color="tab:green")
-            st.pyplot(fig_K)
+            show_figure(fig_K)
 
             st.markdown(
                 "**Per-trace fitted parameters** (kb, and K = G\\*I0 / G3\\*I0 — I0 and "

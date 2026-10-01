@@ -10,6 +10,7 @@
 import numpy as np
 import pandas as pd
 import streamlit as st
+from app.plot_style import show_figure
 
 from history_store import (
     load_variable_bleaching_history,
@@ -40,7 +41,7 @@ def _render_multi_start_entry(entry, index):
 
     st.markdown(f"**{shared_label} across runs** (shared across all traces)")
     fig_shared = plot_histograms(plot_df, shared_names, true_values, color="tab:blue")
-    st.pyplot(fig_shared)
+    show_figure(fig_shared)
 
     summary_rows = []
     for name in shared_names:
@@ -71,11 +72,11 @@ def _render_multi_start_entry(entry, index):
 
     st.markdown("**kb across runs, per trace**")
     fig_kb = plot_histograms(display_df, kb_display_names, display_true_values, color="tab:purple")
-    st.pyplot(fig_kb)
+    show_figure(fig_kb)
 
     st.markdown("**K across runs, per trace** (K = G\\*I0 / G3\\*I0)")
     fig_K = plot_histograms(display_df, K_display_names, display_true_values, color="tab:green")
-    st.pyplot(fig_K)
+    show_figure(fig_K)
 
     st.markdown(
         "**Per-trace fitted parameters** (kb, and K = G\\*I0 / G3\\*I0 — I0 and "
