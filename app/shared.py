@@ -7,7 +7,6 @@ here rather than duplicated.
 
 import numpy as np
 import pandas as pd
-from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import streamlit as st
@@ -377,11 +376,6 @@ def render_kalman_result(result):
     st.dataframe(rmse_df.style.format("{:.4f}"))
 
 
-# Times (min) of the u(t) peak and the M(t) peak marked as the reporter delay
-# on the Synthetic Gene Expression combined graph.
-REPORTER_DELAY_PEAK_TIMES = (155.0, 178.0)
-
-
 def render_synthetic_expression_result(result):
     """Render the ground-truth u(t)/I/(X)/M/fluorescence plots for one
     Synthetic Gene Expression run.
@@ -446,9 +440,9 @@ def render_synthetic_expression_result(result):
     fig.tight_layout()
     show_figure(fig)
 
-    # Gene expression and protein pools on one plot, to show the reporter
-    # delay. u(t) is a rate (/min), typically far smaller than the protein
-    # amounts, so it gets its own right axis.
+    # Gene expression and protein pools on one plot. u(t) is a rate (/min),
+    # typically far smaller than the protein amounts, so it gets its own
+    # right axis.
     t = np.asarray(t, dtype=float)
     true_u = np.asarray(result["true_u"], dtype=float)
     true_M = np.asarray(result["true_M"], dtype=float)
@@ -468,51 +462,22 @@ def render_synthetic_expression_result(result):
     ax_u = ax.twinx()
     hidden += ax_u.plot(t, true_u, "--", color=SPECIES_COLORS["u"], lw=1.5, label="$u(t)$ (gene expression)")
     ax_u.set_ylabel("Synthesis rate $u$ (/min)")
-    # Both axes start at 0. The left axis gets headroom above the tallest
-    # curve for the delay annotation, and the u axis runs to twice u's peak
-    # so u(t) stays in the lower half instead of stretching over the plot.
+    # Both axes start at 0, and the u axis runs to twice u's peak so u(t)
+    # stays in the lower half instead of stretching over the plot.
     left_max = max(
         [float(np.max(result["z_n"]))] + [np.max(line.get_ydata()) for line in ax.get_lines()]
     )
-    ax.set_ylim(0, 1.25 * left_max if left_max > 0 else 1)
+    ax.set_ylim(0, 1.05 * left_max if left_max > 0 else 1)
     u_max = float(np.max(true_u))
     if u_max > 0:
         ax_u.set_ylim(0, 2 * u_max)
-
-    # Mark a peak of u(t) and the following peak of M(t); the gap between
-    # them is the reporter delay -- the lag through the whole u -> I (-> X) -> M
-    # chain, i.e. maturation plus bleaching/degradation, not maturation alone.
-    # The peak times are hardcoded for now (see REPORTER_DELAY_PEAK_TIMES);
-    # `_peaks` below can find them automatically instead.
-    t_u, t_M = REPORTER_DELAY_PEAK_TIMES
-    if t[0] <= t_u <= t[-1] and t[0] <= t_M <= t[-1]:
-        u_val = np.interp(t_u, t, true_u)
-        M_val = np.interp(t_M, t, true_M)
-        ax_u.plot(t_u, u_val, "o", color=SPECIES_COLORS["u"], ms=6, zorder=5)
-        ax.plot(t_M, M_val, "o", color=SPECIES_COLORS["M"], ms=6, zorder=5)
-        arrow_y = 0.88  # axes fraction, inside the headroom set above
-        for t_peak, color in ((t_u, SPECIES_COLORS["u"]), (t_M, SPECIES_COLORS["M"])):
-            ax.axvline(t_peak, ymax=arrow_y, color=color, linestyle=":", lw=1)
-        ax.annotate(
-            "", xy=(t_M, arrow_y), xytext=(t_u, arrow_y), xycoords=("data", "axes fraction"),
-            arrowprops=dict(arrowstyle="<->", color="black", lw=1, shrinkA=0, shrinkB=0),
-        )
-        ax.text(
-            (t_u + t_M) / 2, arrow_y + 0.015, rf"Reporter delay $\Delta t$ = {t_M - t_u:.1f} min",
-            transform=ax.get_xaxis_transform(), ha="center", va="bottom", fontsize=plt.rcParams["legend.fontsize"],
-        )
-    else:
-        st.caption(
-            f"The reporter delay peak times (t = {t_u:g} and t = {t_M:g} min) are "
-            "outside this run's time window, so the delay isn't marked."
-        )
 
     # Legend grouped under "Observed" (what the experiment measures) and
     # "Hidden" (the states the Kalman filter has to reconstruct), placed
     # outside the plot so it never covers the data.
     _grouped_legend(ax, {"Observed": observed, "Hidden": hidden},
                     loc="upper left", bbox_to_anchor=(1.12, 1.0))
-    ax.set_title("Reporter Delay: Gene Expression Vs. Protein Pools")
+    ax.set_title("Gene Expression Vs. Protein Pools")
     ax.grid(alpha=0.3)
     fig.tight_layout()
     show_figure(fig)
@@ -545,24 +510,6 @@ def _grouped_legend(ax, groups, **legend_kwargs):
     except (AttributeError, IndexError):
         pass
     return legend
-
-
-def _peaks(t, y):
-    """(time, value) of every interior local maximum of `y`, in time order.
-
-    Not currently called: the reporter delay uses REPORTER_DELAY_PEAK_TIMES.
-
-    Each peak is refined between samples with a parabola through the peak
-    sample and its two neighbours, so the delay isn't rounded to the
-    sampling interval.
-    """
-    refined = []
-    for i in find_peaks(y)[0]:
-        y0, y1, y2 = y[i - 1], y[i], y[i + 1]
-        denom = y0 - 2 * y1 + y2
-        offset = 0.5 * (y0 - y2) / denom if denom != 0 else 0.0
-        refined.append((t[i] + offset * (t[i + 1] - t[i]), y1 - 0.25 * (y0 - y2) * offset))
-    return refined
 
 
 def render_profile_2d_result(profile_df):

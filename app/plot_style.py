@@ -1,38 +1,30 @@
 """Global matplotlib styling for every figure the Streamlit UI draws.
 
-Figures use Lato for all text, including mathtext (u(t), I(t), k_m, ...),
-from the font files bundled in `static/fonts/`. rcParams are
-process-global, so importing this module once from `streamlit_app.py`
+Figures use Times New Roman for all text, and STIX (a Times-style maths
+font shipped with matplotlib) for mathtext (u(t), I(t), k_m, ...). rcParams
+are process-global, so importing this module once from `streamlit_app.py`
 (before any figure is built) also covers figures built in the
 non-Streamlit helper modules, e.g. `Parameter_Identification/multi_start_plots.py`.
-(The page text outside the figures uses Latin Modern, set in
+(The page text outside the figures also uses Times New Roman, set in
 `.streamlit/config.toml`.)
 """
 
 import hashlib
 import io
 import re
-from pathlib import Path
 
 import matplotlib
 import streamlit as st
-from matplotlib import font_manager
 
 # Resolution every figure is rendered at in the UI (and saved at by default).
 FIGURE_DPI = 400
 
-# Lato isn't a system font on most machines, so register the bundled copy
-# (without this, matplotlib silently falls back to its default font).
-FONT_DIR = Path(__file__).resolve().parent.parent / "static" / "fonts"
-for _font_path in FONT_DIR.glob("Lato-*.ttf"):
-    font_manager.fontManager.addfont(str(_font_path))
-
 matplotlib.rcParams.update({
-    "font.family": "Lato",
-    "mathtext.fontset": "custom",       # makes u(t), I(t), k_m etc. use Lato too
-    "mathtext.rm": "Lato",
-    "mathtext.it": "Lato:italic",
-    "mathtext.bf": "Lato:bold",
+    "font.family": "serif",
+    # Falls back to matplotlib's bundled STIX/DejaVu Serif on machines
+    # without Times New Roman installed (e.g. most Linux servers).
+    "font.serif": ["Times New Roman", "Times", "STIXGeneral", "DejaVu Serif"],
+    "mathtext.fontset": "stix",         # Times-style u(t), I(t), k_m etc.
     "font.size": 18,
     "axes.titlesize": 20,
     "axes.labelsize": 18,
